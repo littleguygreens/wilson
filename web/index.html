@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#0f1216">
-<title>seedscan</title>
+<title>wilson</title>
 <style>
   :root {
     --bg: #0f1216; --panel: #181d24; --panel-2: #1f2630; --line: #2a323d;
@@ -94,7 +94,7 @@
 <body>
 <div class="wrap">
   <header>
-    <h1>seedscan</h1>
+    <h1>wilson</h1>
     <p>survival island finder</p>
   </header>
 
@@ -231,10 +231,20 @@
       enclosed: 1, moat: 300, stronghold: 0, shDist: 1700, n: 5, workers: ''
     }
   }];
-  const PRESET_KEY = 'seedscan.presets';
+  const PRESET_KEY = 'wilson.presets';
+  const OLD_PRESET_KEY = 'seedscan.presets';
   const MAX_PRESETS = 3;
 
-  function loadUserPresets() { try { return JSON.parse(localStorage.getItem(PRESET_KEY) || '[]'); } catch (_) { return []; } }
+  function loadUserPresets() {
+    try {
+      // One-time migration from the old key so saved presets aren't lost.
+      if (localStorage.getItem(PRESET_KEY) === null && localStorage.getItem(OLD_PRESET_KEY) !== null) {
+        localStorage.setItem(PRESET_KEY, localStorage.getItem(OLD_PRESET_KEY));
+        localStorage.removeItem(OLD_PRESET_KEY);
+      }
+      return JSON.parse(localStorage.getItem(PRESET_KEY) || '[]');
+    } catch (_) { return []; }
+  }
   function saveUserPresets(a) { try { localStorage.setItem(PRESET_KEY, JSON.stringify(a)); } catch (_) {} }
 
   function renderPresets() {

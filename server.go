@@ -108,7 +108,7 @@ func runServer(addr string) error {
 	mux.HandleFunc("/api/scan", scanHandler)
 	mux.HandleFunc("/api/map", mapHandler)
 
-	log.Printf("seedscan web UI on http://localhost%s  (open it from your phone using this machine's LAN IP)", addr)
+	log.Printf("wilson web UI on http://localhost%s  (open it from your phone using this machine's LAN IP)", addr)
 	return http.ListenAndServe(addr, mux)
 }
 

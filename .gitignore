@@ -2,7 +2,7 @@
 cubiomes/
 
 # compiled binary
-seedscan
+/wilson
 
 # scan output
 matches/

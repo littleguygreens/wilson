@@ -1,16 +1,17 @@
-# seedscan
+# wilson
 
-A survival-island seed finder for Minecraft Java Edition. Scans random seeds
-for a spawn island matching biome, ocean, cave and size criteria you choose,
-and can require the island to be big enough (a "continent") to contain the
-first stronghold. Filtering is done in C against cubiomes; Go handles the
-worker pool, the web UI, the CLI and the PNG maps.
+A survival-island seed finder for Minecraft Java Edition (named for the
+volleyball -- it hunts for islands to be marooned on). Scans random seeds for
+a spawn island matching biome, ocean, cave and size criteria you choose, and
+can require the island to be big enough (a "continent") to contain the first
+stronghold. Filtering is done in C against cubiomes; Go handles the worker
+pool, the web UI, the CLI and the PNG maps.
 
 ## Build
 
 Requires gcc and Go. Network access needed for the clone.
 
-    cd seedscan
+    cd wilson
     git clone https://github.com/Cubitect/cubiomes.git
     make -C cubiomes libcubiomes
     go build
@@ -20,7 +21,7 @@ Requires gcc and Go. Network access needed for the clone.
 Run the scanner as a small web server on any machine with the build
 toolchain, then drive it from your phone's browser:
 
-    ./seedscan -serve
+    ./wilson -serve
 
 Open `http://<that-machine's-LAN-IP>:8080` on your phone and pick your
 parameters:
@@ -58,7 +59,7 @@ so a long dry spell still shows live progress.
 
 For a one-off scan with the built-in default (mountain + lush-caves island):
 
-    ./seedscan -n 5 -out matches
+    ./wilson -n 5 -out matches
 
 Flags:
 
