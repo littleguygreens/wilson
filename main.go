@@ -4,6 +4,7 @@ package main
 #cgo CFLAGS: -I${SRCDIR}/cubiomes -O3
 #cgo LDFLAGS: -L${SRCDIR}/cubiomes -lcubiomes -lm
 #include <stdlib.h>
+#include "biomes.h"
 #include "scan.h"
 */
 import "C"
@@ -26,20 +27,153 @@ import (
 	"unsafe"
 )
 
-// mapSize is the width and height of the output image in pixels.
-// mapStep is how many blocks each pixel covers, so the picture spans
-// mapSize*mapStep blocks -- 512*4 = 2048 blocks across, centred on 0,0.
-const (
-	mapSize = 512
-	mapStep = 4
-	mapY    = 60
-)
+// mapPixels is the width/height of every output map in pixels. The number of
+// blocks it spans is mapPixels*step, where step comes from the search size.
+const mapPixels = 512
+
+// marker is a block-coordinate point drawn on a map.
+type marker struct{ x, z int }
 
 type hit struct {
-	seed      uint64
-	spawnX    int
-	spawnZ    int
-	lushCount int
+	seed          uint64
+	spawnX        int
+	spawnZ        int
+	caveCount     int
+	hasStronghold bool
+	strongholdX   int
+	strongholdZ   int
+}
+
+// Config is the pure-Go description of a search. It is translated to a C
+// ScanConfig by toCConfig; keeping it Go-only lets server.go build searches
+// without touching cgo.
+type Config struct {
+	Surface         []int32
+	MatchAllSurface bool
+	Ocean           []int32
+	Cave            []int32
+	MatchAllCave    bool
+	MinCave         int
+
+	IslandRadius   int
+	GridStep       int
+	MinLandPercent int
+	RingRadius     int
+	RingSamples    int
+	RingMinOcean   int
+	OuterRadius    int
+	OuterSamples   int
+	OuterMinOcean  int
+
+	RequireStronghold bool
+	StrongholdMaxDist int
+
+	MapStep int // rendering zoom; not part of the C filter
+}
+
+// biomeEntry ties a stable UI key to a cubiomes biome id. The id stays
+// unexported so the C dependency doesn't leak out of this file.
+type biomeEntry struct {
+	Category string
+	Key      string
+	Label    string
+	id       int32
+}
+
+// catalog is the authoritative list of selectable biomes. The web menu is built
+// from it (keys + labels), and search requests map keys back to ids through it.
+var catalog = []biomeEntry{
+	// Island surface biomes.
+	{"surface", "plains", "Plains", int32(C.plains)},
+	{"surface", "forest", "Forest", int32(C.forest)},
+	{"surface", "birch_forest", "Birch Forest", int32(C.birch_forest)},
+	{"surface", "dark_forest", "Dark Forest", int32(C.dark_forest)},
+	{"surface", "taiga", "Taiga", int32(C.taiga)},
+	{"surface", "snowy_taiga", "Snowy Taiga", int32(C.snowy_taiga)},
+	{"surface", "jungle", "Jungle", int32(C.jungle)},
+	{"surface", "bamboo_jungle", "Bamboo Jungle", int32(C.bamboo_jungle)},
+	{"surface", "savanna", "Savanna", int32(C.savanna)},
+	{"surface", "desert", "Desert", int32(C.desert)},
+	{"surface", "swamp", "Swamp", int32(C.swamp)},
+	{"surface", "mangrove_swamp", "Mangrove Swamp", int32(C.mangrove_swamp)},
+	{"surface", "badlands", "Badlands", int32(C.badlands)},
+	{"surface", "mushroom_fields", "Mushroom Fields", int32(C.mushroom_fields)},
+	{"surface", "cherry_grove", "Cherry Grove", int32(C.cherry_grove)},
+	{"surface", "meadow", "Meadow", int32(C.meadow)},
+	{"surface", "grove", "Grove", int32(C.grove)},
+	{"surface", "snowy_slopes", "Snowy Slopes", int32(C.snowy_slopes)},
+	{"surface", "windswept_hills", "Windswept Hills", int32(C.windswept_hills)},
+	{"surface", "jagged_peaks", "Jagged Peaks", int32(C.jagged_peaks)},
+	{"surface", "frozen_peaks", "Frozen Peaks", int32(C.frozen_peaks)},
+	{"surface", "stony_peaks", "Stony Peaks", int32(C.stony_peaks)},
+
+	// Allowed ocean types for the isolation rings.
+	{"ocean", "ocean", "Ocean", int32(C.ocean)},
+	{"ocean", "deep_ocean", "Deep Ocean", int32(C.deep_ocean)},
+	{"ocean", "warm_ocean", "Warm Ocean", int32(C.warm_ocean)},
+	{"ocean", "lukewarm_ocean", "Lukewarm Ocean", int32(C.lukewarm_ocean)},
+	{"ocean", "deep_lukewarm_ocean", "Deep Lukewarm", int32(C.deep_lukewarm_ocean)},
+	{"ocean", "cold_ocean", "Cold Ocean", int32(C.cold_ocean)},
+	{"ocean", "deep_cold_ocean", "Deep Cold", int32(C.deep_cold_ocean)},
+	{"ocean", "frozen_ocean", "Frozen Ocean", int32(C.frozen_ocean)},
+	{"ocean", "deep_frozen_ocean", "Deep Frozen", int32(C.deep_frozen_ocean)},
+
+	// Underground cave biomes.
+	{"cave", "lush_caves", "Lush Caves", int32(C.lush_caves)},
+	{"cave", "dripstone_caves", "Dripstone Caves", int32(C.dripstone_caves)},
+	{"cave", "deep_dark", "Deep Dark", int32(C.deep_dark)},
+}
+
+// biomeKeyToID resolves a UI key to its cubiomes biome id.
+func biomeKeyToID(key string) (int32, bool) {
+	for _, e := range catalog {
+		if e.Key == key {
+			return e.id, true
+		}
+	}
+	return 0, false
+}
+
+// toCConfig marshals a Go Config into the C struct passed to scanner_check.
+func toCConfig(cfg Config) C.ScanConfig {
+	var c C.ScanConfig
+	putList := func(dst *[C.SCAN_MAX_LIST]C.int, src []int32) C.int {
+		n := len(src)
+		if n > C.SCAN_MAX_LIST {
+			n = C.SCAN_MAX_LIST
+		}
+		for i := 0; i < n; i++ {
+			dst[i] = C.int(src[i])
+		}
+		return C.int(n)
+	}
+	c.nSurface = putList(&c.surface, cfg.Surface)
+	c.nOcean = putList(&c.ocean, cfg.Ocean)
+	c.nCave = putList(&c.cave, cfg.Cave)
+	c.matchAllSurface = boolToC(cfg.MatchAllSurface)
+	c.matchAllCave = boolToC(cfg.MatchAllCave)
+	c.minCave = C.int(cfg.MinCave)
+
+	c.islandRadius = C.int(cfg.IslandRadius)
+	c.gridStep = C.int(cfg.GridStep)
+	c.minLandPercent = C.int(cfg.MinLandPercent)
+	c.ringRadius = C.int(cfg.RingRadius)
+	c.ringSamples = C.int(cfg.RingSamples)
+	c.ringMinOcean = C.int(cfg.RingMinOcean)
+	c.outerRadius = C.int(cfg.OuterRadius)
+	c.outerSamples = C.int(cfg.OuterSamples)
+	c.outerMinOcean = C.int(cfg.OuterMinOcean)
+
+	c.requireStronghold = boolToC(cfg.RequireStronghold)
+	c.strongholdMaxDist = C.int(cfg.StrongholdMaxDist)
+	return c
+}
+
+func boolToC(b bool) C.int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 func main() {
@@ -58,41 +192,61 @@ func main() {
 		log.Fatal(err)
 	}
 
+	cfg := defaultConfig()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// The renderer needs its own generator, for the same reason the workers do
-	// -- see the comment in search().
 	renderer := C.scanner_new()
 	defer C.scanner_free(renderer)
 
 	var tested int64
 	found := 0
-	runScan(ctx, *workers, &tested, func(h hit) bool {
+	runScan(ctx, *workers, &tested, cfg, func(h hit) bool {
 		found++
-		fmt.Printf("seed %d  spawn %d,%d  lush samples %d\n",
-			int64(h.seed), h.spawnX, h.spawnZ, h.lushCount)
+		fmt.Printf("seed %d  spawn %d,%d  caves %d\n",
+			int64(h.seed), h.spawnX, h.spawnZ, h.caveCount)
 
 		path := filepath.Join(*outDir, fmt.Sprintf("%d.png", int64(h.seed)))
-		if err := writeMapPNG(renderer, h, path); err != nil {
+		if err := writeMapPNG(renderer, h, cfg.MapStep, path); err != nil {
 			log.Printf("render %d: %v", int64(h.seed), err)
 		}
-
-		// Returning false tells runScan to stop the workers.
 		return found < *wanted
 	})
 
 	fmt.Printf("\ntested %d seeds\n", atomic.LoadInt64(&tested))
 }
 
+// defaultConfig is the original "mountains + lush caves island" search, used by
+// the CLI so its behaviour is unchanged.
+func defaultConfig() Config {
+	peaks := []int32{}
+	for _, k := range []string{"jagged_peaks", "frozen_peaks", "stony_peaks", "snowy_slopes", "windswept_hills"} {
+		if id, ok := biomeKeyToID(k); ok {
+			peaks = append(peaks, id)
+		}
+	}
+	lush, _ := biomeKeyToID("lush_caves")
+
+	cfg := geometryForSize("M")
+	cfg.Surface = peaks
+	cfg.MatchAllSurface = false
+	cfg.Cave = []int32{lush}
+	cfg.MatchAllCave = false
+	cfg.MinCave = 3
+	return cfg
+}
+
 // runScan spins up the worker pool and calls onHit for every matching seed, in
-// the order they arrive. onHit returns false to stop the scan; runScan also
-// stops when ctx is cancelled (e.g. an HTTP client disconnecting). It blocks
-// until every worker has exited, leaving no goroutines behind.
-func runScan(parent context.Context, workers int, tested *int64, onHit func(hit) bool) {
+// the order they arrive. onHit returns false to stop; runScan also stops when
+// ctx is cancelled. It blocks until every worker has exited.
+func runScan(parent context.Context, workers int, tested *int64, cfg Config, onHit func(hit) bool) {
 	if workers < 1 {
 		workers = 1
 	}
+
+	// One C config shared read-only by every worker. It contains no Go
+	// pointers, so passing its address into C is safe under cgo's rules.
+	cCfg := toCConfig(cfg)
 
 	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
@@ -103,11 +257,10 @@ func runScan(parent context.Context, workers int, tested *int64, onHit func(hit)
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			search(ctx, hits, tested)
+			search(ctx, hits, tested, &cCfg)
 		}()
 	}
 
-	// Close hits once every worker has returned so the range below terminates.
 	go func() {
 		wg.Wait()
 		close(hits)
@@ -116,24 +269,22 @@ func runScan(parent context.Context, workers int, tested *int64, onHit func(hit)
 	stopped := false
 	for h := range hits {
 		if stopped {
-			continue // draining so workers never block on a send
+			continue
 		}
 		if !onHit(h) {
 			stopped = true
-			cancel() // workers select on ctx.Done() and return
+			cancel()
 		}
 	}
 }
 
-func search(ctx context.Context, hits chan<- hit, tested *int64) {
+func search(ctx context.Context, hits chan<- hit, tested *int64, cCfg *C.ScanConfig) {
 	// One generator per goroutine. cubiomes' Generator struct holds mutable
 	// state that applySeed() overwrites, so two goroutines sharing one would
 	// silently corrupt each other's results -- no crash, just wrong answers.
 	s := C.scanner_new()
 	defer C.scanner_free(s)
 
-	// Each worker gets its own random source. Sharing one would mean the
-	// workers contend on a lock for every seed.
 	rng := rand.NewPCG(rand.Uint64(), rand.Uint64())
 	r := rand.New(rng)
 
@@ -145,7 +296,7 @@ func search(ctx context.Context, hits chan<- hit, tested *int64) {
 		}
 
 		seed := r.Uint64()
-		res := C.scanner_check(s, C.uint64_t(seed))
+		res := C.scanner_check(s, C.uint64_t(seed), cCfg)
 		atomic.AddInt64(tested, 1)
 
 		if res.match == 0 {
@@ -153,10 +304,13 @@ func search(ctx context.Context, hits chan<- hit, tested *int64) {
 		}
 		select {
 		case hits <- hit{
-			seed:      seed,
-			spawnX:    int(res.spawnX),
-			spawnZ:    int(res.spawnZ),
-			lushCount: int(res.lushCount),
+			seed:          seed,
+			spawnX:        int(res.spawnX),
+			spawnZ:        int(res.spawnZ),
+			caveCount:     int(res.caveCount),
+			hasStronghold: res.hasStronghold != 0,
+			strongholdX:   int(res.strongholdX),
+			strongholdZ:   int(res.strongholdZ),
 		}:
 		case <-ctx.Done():
 			return
@@ -164,9 +318,7 @@ func search(ctx context.Context, hits chan<- hit, tested *int64) {
 	}
 }
 
-// palette pulls cubiomes' own biome colours across once, so the maps look like
-// the ones you have seen from other seed tools. Loaded lazily and cached, since
-// both the CLI and the web server want it.
+// palette pulls cubiomes' own biome colours across once, cached for reuse.
 var (
 	paletteOnce sync.Once
 	paletteData [256]color.RGBA
@@ -188,21 +340,21 @@ func palette() [256]color.RGBA {
 	return paletteData
 }
 
-// renderImage draws the biome map for a seed and marks spawn with a white
-// cross. The generator s is borrowed for the duration of the call.
-func renderImage(s unsafe.Pointer, seed uint64, spawnX, spawnZ int) *image.RGBA {
-	// Allocate the grid in Go and hand C a pointer to it. Because the slice is
-	// only borrowed for the duration of the call and C keeps no reference to
-	// it, this is safe under cgo's pointer rules.
-	grid := make([]C.int, mapSize*mapSize)
-	C.scanner_biome_grid(s, C.uint64_t(seed), mapSize, mapStep, mapY,
+// renderImage draws the biome map for a seed at the given block-per-pixel step,
+// marks spawn, and (if present) marks the stronghold.
+func renderImage(s unsafe.Pointer, seed uint64, step int, spawn marker, sh *marker) *image.RGBA {
+	if step < 1 {
+		step = 4
+	}
+	grid := make([]C.int, mapPixels*mapPixels)
+	C.scanner_biome_grid(s, C.uint64_t(seed), mapPixels, C.int(step), C.int(60),
 		(*C.int)(unsafe.Pointer(&grid[0])))
 
 	p := palette()
-	img := image.NewRGBA(image.Rect(0, 0, mapSize, mapSize))
-	for j := 0; j < mapSize; j++ {
-		for i := 0; i < mapSize; i++ {
-			id := int(grid[j*mapSize+i])
+	img := image.NewRGBA(image.Rect(0, 0, mapPixels, mapPixels))
+	for j := 0; j < mapPixels; j++ {
+		for i := 0; i < mapPixels; i++ {
+			id := int(grid[j*mapPixels+i])
 			if id < 0 || id > 255 {
 				id = 0
 			}
@@ -210,36 +362,76 @@ func renderImage(s unsafe.Pointer, seed uint64, spawnX, spawnZ int) *image.RGBA 
 		}
 	}
 
-	// Mark spawn with a bold white cross wrapped in a dark halo, so it stays
-	// legible whether it lands on green, blue or sandy terrain. SetRGBA already
-	// ignores out-of-bounds points, so no edge guard is needed.
-	half := mapSize / 2
-	sx := half + spawnX/mapStep
-	sz := half + spawnZ/mapStep
-	const arm = 7
-	black := color.RGBA{0, 0, 0, 255}
-	white := color.RGBA{255, 255, 255, 255}
-	// Halo first: a fatter black cross underneath.
-	for d := -arm - 1; d <= arm+1; d++ {
-		for t := -2; t <= 2; t++ {
-			img.SetRGBA(sx+d, sz+t, black)
-			img.SetRGBA(sx+t, sz+d, black)
-		}
+	half := mapPixels / 2
+	if sh != nil {
+		// Stronghold: a white-bordered red diamond. The white ring keeps it from
+		// blending into pink/magenta biomes (mushroom fields, cherry grove).
+		drawMarker(img, half+sh.x/step, half+sh.z/step, 6,
+			color.RGBA{230, 40, 40, 255})
 	}
-	// White cross on top, 3px thick.
-	for d := -arm; d <= arm; d++ {
-		for t := -1; t <= 1; t++ {
-			img.SetRGBA(sx+d, sz+t, white)
-			img.SetRGBA(sx+t, sz+d, white)
-		}
-	}
+	// Spawn: a bold white cross with a dark halo, drawn last so it stays on top.
+	drawCross(img, half+spawn.x/step, half+spawn.z/step, 7,
+		color.RGBA{255, 255, 255, 255})
 	return img
 }
 
-// writeMapPNG renders a hit's map using an existing generator and writes it to
+// drawCross plots a thick cross with a black halo so it reads on any terrain.
+func drawCross(img *image.RGBA, cx, cz, arm int, c color.RGBA) {
+	black := color.RGBA{0, 0, 0, 255}
+	for d := -arm - 1; d <= arm+1; d++ {
+		for t := -2; t <= 2; t++ {
+			img.SetRGBA(cx+d, cz+t, black)
+			img.SetRGBA(cx+t, cz+d, black)
+		}
+	}
+	for d := -arm; d <= arm; d++ {
+		for t := -1; t <= 1; t++ {
+			img.SetRGBA(cx+d, cz+t, c)
+			img.SetRGBA(cx+t, cz+d, c)
+		}
+	}
+}
+
+// drawMarker plots a filled diamond as a colored core inside a white ring inside
+// a black halo, so it reads as a map pin against any biome.
+func drawMarker(img *image.RGBA, cx, cz, radius int, c color.RGBA) {
+	black := color.RGBA{0, 0, 0, 255}
+	white := color.RGBA{255, 255, 255, 255}
+	fill := func(rad int, col color.RGBA) {
+		for dz := -rad; dz <= rad; dz++ {
+			for dx := -rad; dx <= rad; dx++ {
+				if abs(dx)+abs(dz) <= rad {
+					img.SetRGBA(cx+dx, cz+dz, col)
+				}
+			}
+		}
+	}
+	fill(radius+2, black)
+	fill(radius+1, white)
+	fill(radius, c)
+}
+
+func abs(v int) int {
+	if v < 0 {
+		return -v
+	}
+	return v
+}
+
+func hitMarkers(h hit) (marker, *marker) {
+	spawn := marker{h.spawnX, h.spawnZ}
+	if h.hasStronghold {
+		sh := marker{h.strongholdX, h.strongholdZ}
+		return spawn, &sh
+	}
+	return spawn, nil
+}
+
+// writeMapPNG renders a hit's map with an existing generator and writes it to
 // disk. Used by the CLI.
-func writeMapPNG(s unsafe.Pointer, h hit, path string) error {
-	img := renderImage(s, h.seed, h.spawnX, h.spawnZ)
+func writeMapPNG(s unsafe.Pointer, h hit, step int, path string) error {
+	spawn, sh := hitMarkers(h)
+	img := renderImage(s, h.seed, step, spawn, sh)
 	f, err := os.Create(path)
 	if err != nil {
 		return err
@@ -248,11 +440,11 @@ func writeMapPNG(s unsafe.Pointer, h hit, path string) error {
 	return png.Encode(f, img)
 }
 
-// renderPNG renders a map straight to w (e.g. an HTTP response). It owns its own
-// generator, so it is safe to call concurrently. Used by the web server.
-func renderPNG(w io.Writer, seed uint64, spawnX, spawnZ int) error {
+// renderPNG renders a map straight to w. It owns its own generator, so it is
+// safe to call concurrently. Used by the web server.
+func renderPNG(w io.Writer, seed uint64, step int, spawn marker, sh *marker) error {
 	s := C.scanner_new()
 	defer C.scanner_free(s)
-	img := renderImage(s, seed, spawnX, spawnZ)
+	img := renderImage(s, seed, step, spawn, sh)
 	return png.Encode(w, img)
 }

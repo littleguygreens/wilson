@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"net/http"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -16,16 +18,81 @@ import (
 //go:embed web/index.html
 var indexHTML []byte
 
-// maxWorkers caps what a single web request can ask for, so a stray URL can't
-// spin up thousands of goroutines.
-const maxWorkers = 64
+const (
+	maxWorkers    = 64
+	maxSurface    = 3 // how many island biomes a search may request
+	defaultMinCav = 3
+)
+
+// sizePreset maps an island-size choice to search geometry and map zoom. Bigger
+// sizes push the ocean rings out and zoom the map so the whole landmass fits.
+// XXL ("continent") drops the inner ring (spawn is deep inland) and leans on the
+// far outer ring plus a high land floor.
+type sizePreset struct {
+	Key            string `json:"key"`
+	Label          string `json:"label"`
+	IslandRadius   int    `json:"-"`
+	GridStep       int    `json:"-"`
+	MinLandPercent int    `json:"-"`
+	RingRadius     int    `json:"-"`
+	RingSamples    int    `json:"-"`
+	RingMinOcean   int    `json:"-"`
+	OuterRadius    int    `json:"-"`
+	OuterSamples   int    `json:"-"`
+	OuterMinOcean  int    `json:"-"`
+	MapStep        int    `json:"-"`
+}
+
+var sizePresets = []sizePreset{
+	{Key: "S", Label: "Small", IslandRadius: 120, GridStep: 12, MinLandPercent: 20,
+		RingRadius: 160, RingSamples: 32, RingMinOcean: 28,
+		OuterRadius: 380, OuterSamples: 40, OuterMinOcean: 30, MapStep: 2},
+	{Key: "M", Label: "Medium", IslandRadius: 200, GridStep: 16, MinLandPercent: 25,
+		RingRadius: 250, RingSamples: 32, RingMinOcean: 30,
+		OuterRadius: 600, OuterSamples: 48, OuterMinOcean: 38, MapStep: 4},
+	{Key: "L", Label: "Large", IslandRadius: 320, GridStep: 20, MinLandPercent: 35,
+		RingRadius: 420, RingSamples: 40, RingMinOcean: 34,
+		OuterRadius: 900, OuterSamples: 48, OuterMinOcean: 36, MapStep: 6},
+	{Key: "XL", Label: "Huge", IslandRadius: 520, GridStep: 28, MinLandPercent: 45,
+		RingRadius: 660, RingSamples: 48, RingMinOcean: 38,
+		OuterRadius: 1300, OuterSamples: 48, OuterMinOcean: 34, MapStep: 10},
+	{Key: "XXL", Label: "Continent", IslandRadius: 1400, GridStep: 64, MinLandPercent: 70,
+		RingRadius: 0, RingSamples: 0, RingMinOcean: 0,
+		OuterRadius: 1800, OuterSamples: 48, OuterMinOcean: 34, MapStep: 16},
+}
+
+func presetForSize(key string) sizePreset {
+	for _, p := range sizePresets {
+		if p.Key == key {
+			return p
+		}
+	}
+	return sizePresets[1] // default Medium
+}
+
+// geometryForSize returns a Config with only the geometry/zoom fields filled.
+func geometryForSize(key string) Config {
+	p := presetForSize(key)
+	return Config{
+		IslandRadius:   p.IslandRadius,
+		GridStep:       p.GridStep,
+		MinLandPercent: p.MinLandPercent,
+		RingRadius:     p.RingRadius,
+		RingSamples:    p.RingSamples,
+		RingMinOcean:   p.RingMinOcean,
+		OuterRadius:    p.OuterRadius,
+		OuterSamples:   p.OuterSamples,
+		OuterMinOcean:  p.OuterMinOcean,
+		MapStep:        p.MapStep,
+	}
+}
 
 func runServer(addr string) error {
-	// Warm the palette once up front rather than on the first map request.
-	palette()
+	palette() // warm the biome colours once
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", indexHandler)
+	mux.HandleFunc("/api/biomes", biomesHandler)
 	mux.HandleFunc("/api/scan", scanHandler)
 	mux.HandleFunc("/api/map", mapHandler)
 
@@ -42,18 +109,91 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(indexHTML)
 }
 
-// matchDTO is the JSON shape sent to the browser for each matching seed. Seed
-// is signed to match how Minecraft and the CLI display Java seeds.
-type matchDTO struct {
-	Seed   int64 `json:"seed"`
-	SpawnX int   `json:"spawnX"`
-	SpawnZ int   `json:"spawnZ"`
-	Lush   int   `json:"lush"`
+// biomesHandler feeds the menu: selectable biomes by category, and the sizes.
+func biomesHandler(w http.ResponseWriter, r *http.Request) {
+	type opt struct {
+		Key   string `json:"key"`
+		Label string `json:"label"`
+	}
+	out := struct {
+		Surface    []opt        `json:"surface"`
+		Ocean      []opt        `json:"ocean"`
+		Cave       []opt        `json:"cave"`
+		Sizes      []sizePreset `json:"sizes"`
+		MaxSurface int          `json:"maxSurface"`
+	}{Sizes: sizePresets, MaxSurface: maxSurface}
+
+	for _, e := range catalog {
+		o := opt{Key: e.Key, Label: e.Label}
+		switch e.Category {
+		case "surface":
+			out.Surface = append(out.Surface, o)
+		case "ocean":
+			out.Ocean = append(out.Ocean, o)
+		case "cave":
+			out.Cave = append(out.Cave, o)
+		}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(out)
 }
 
-// scanHandler streams scan results to the browser as Server-Sent Events. The
-// scan is tied to the request context, so when the browser closes the
-// EventSource the workers stop.
+// keysToIDs maps comma-separated UI keys to biome ids, dropping unknown ones and
+// capping the count when limit > 0.
+func keysToIDs(csv string, limit int) []int32 {
+	var ids []int32
+	for _, k := range strings.Split(csv, ",") {
+		k = strings.TrimSpace(k)
+		if k == "" {
+			continue
+		}
+		if id, ok := biomeKeyToID(k); ok {
+			ids = append(ids, id)
+			if limit > 0 && len(ids) >= limit {
+				break
+			}
+		}
+	}
+	return ids
+}
+
+// configFromQuery builds a search Config from the request parameters.
+func configFromQuery(r *http.Request) Config {
+	q := r.URL.Query()
+	cfg := geometryForSize(q.Get("size"))
+
+	cfg.Surface = keysToIDs(q.Get("surface"), maxSurface)
+	cfg.MatchAllSurface = q.Get("surfaceAll") == "1"
+	cfg.Ocean = keysToIDs(q.Get("ocean"), 0)
+	cfg.Cave = keysToIDs(q.Get("cave"), 0)
+	cfg.MatchAllCave = q.Get("caveAll") == "1"
+	cfg.MinCave = queryInt(r, "minCave", defaultMinCav)
+	if cfg.MinCave < 1 {
+		cfg.MinCave = 1
+	}
+
+	if q.Get("stronghold") == "1" {
+		cfg.RequireStronghold = true
+		cfg.StrongholdMaxDist = queryInt(r, "shDist", 1700)
+	}
+	return cfg
+}
+
+// matchDTO is the JSON shape sent to the browser for each matching seed.
+type matchDTO struct {
+	Seed           int64 `json:"seed"`
+	SpawnX         int   `json:"spawnX"`
+	SpawnZ         int   `json:"spawnZ"`
+	Caves          int   `json:"caves"`
+	Step           int   `json:"step"`
+	HasStronghold  bool  `json:"hasStronghold"`
+	StrongholdX    int   `json:"strongholdX"`
+	StrongholdZ    int   `json:"strongholdZ"`
+	StrongholdDist int   `json:"strongholdDist"`
+}
+
+// scanHandler streams scan results as Server-Sent Events, tied to the request
+// context so closing the browser stops the workers.
 func scanHandler(w http.ResponseWriter, r *http.Request) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -73,16 +213,15 @@ func scanHandler(w http.ResponseWriter, r *http.Request) {
 		workers = maxWorkers
 	}
 
+	cfg := configFromQuery(r)
+
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 
 	sw := &sseWriter{w: w, f: flusher}
-
 	var tested int64
 
-	// A background ticker reports how many seeds have been checked, so the page
-	// shows progress even during long dry spells between matches.
 	ctx := r.Context()
 	stopTicker := make(chan struct{})
 	var tickerDone sync.WaitGroup
@@ -104,46 +243,55 @@ func scanHandler(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	found := 0
-	runScan(ctx, workers, &tested, func(h hit) bool {
+	runScan(ctx, workers, &tested, cfg, func(h hit) bool {
 		found++
+		dist := int(math.Round(math.Hypot(float64(h.strongholdX), float64(h.strongholdZ))))
 		sw.send("match", matchDTO{
-			Seed:   int64(h.seed),
-			SpawnX: h.spawnX,
-			SpawnZ: h.spawnZ,
-			Lush:   h.lushCount,
+			Seed:           int64(h.seed),
+			SpawnX:         h.spawnX,
+			SpawnZ:         h.spawnZ,
+			Caves:          h.caveCount,
+			Step:           cfg.MapStep,
+			HasStronghold:  h.hasStronghold,
+			StrongholdX:    h.strongholdX,
+			StrongholdZ:    h.strongholdZ,
+			StrongholdDist: dist,
 		})
 		return found < n
 	})
 
 	close(stopTicker)
 	tickerDone.Wait()
-
 	sw.send("done", map[string]int64{
 		"tested": atomic.LoadInt64(&tested),
 		"found":  int64(found),
 	})
 }
 
-// mapHandler renders the biome map PNG for one seed. Spawn coordinates come from
-// the match event so we don't have to recompute the (expensive) spawn point.
+// mapHandler renders the biome map PNG for one seed at the requested zoom, with
+// spawn and (optionally) stronghold markers.
 func mapHandler(w http.ResponseWriter, r *http.Request) {
 	seed, err := strconv.ParseInt(r.URL.Query().Get("seed"), 10, 64)
 	if err != nil {
 		http.Error(w, "bad seed", http.StatusBadRequest)
 		return
 	}
-	sx := queryInt(r, "sx", 0)
-	sz := queryInt(r, "sz", 0)
+	step := queryInt(r, "step", 4)
+	spawn := marker{queryInt(r, "sx", 0), queryInt(r, "sz", 0)}
+
+	var sh *marker
+	if r.URL.Query().Get("st") == "1" {
+		sh = &marker{queryInt(r, "stx", 0), queryInt(r, "stz", 0)}
+	}
 
 	w.Header().Set("Content-Type", "image/png")
 	w.Header().Set("Cache-Control", "public, max-age=3600")
-	if err := renderPNG(w, uint64(seed), sx, sz); err != nil {
+	if err := renderPNG(w, uint64(seed), step, spawn, sh); err != nil {
 		log.Printf("render map for seed %d: %v", seed, err)
 	}
 }
 
-// sseWriter serialises writes to the response, since the match/progress/done
-// events can be produced from different goroutines.
+// sseWriter serialises event writes across the ticker and scan goroutines.
 type sseWriter struct {
 	w  http.ResponseWriter
 	f  http.Flusher

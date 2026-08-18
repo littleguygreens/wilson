@@ -1,8 +1,10 @@
 # seedscan
 
-Scans random Minecraft Java Edition seeds for a spawn island with mountains and
-lush caves underneath. Filtering is done in C against cubiomes; Go handles the
-worker pool, the CLI and the PNG output.
+A survival-island seed finder for Minecraft Java Edition. Scans random seeds
+for a spawn island matching biome, ocean, cave and size criteria you choose,
+and can require the island to be big enough (a "continent") to contain the
+first stronghold. Filtering is done in C against cubiomes; Go handles the
+worker pool, the web UI, the CLI and the PNG maps.
 
 ## Build
 
@@ -13,7 +15,38 @@ Requires gcc and Go. Network access needed for the clone.
     make -C cubiomes libcubiomes
     go build
 
-## Run
+## Web UI (control it from your phone)
+
+Run the scanner as a small web server on any machine with the build
+toolchain, then drive it from your phone's browser:
+
+    ./seedscan -serve
+
+Open `http://<that-machine's-LAN-IP>:8080` on your phone and pick your
+parameters:
+
+- **Island size** S → XXL. Bigger sizes push the surrounding ocean farther
+  out and zoom the map so the whole landmass fits. **XXL ("continent")** is a
+  large isolated landmass rather than a small island.
+- **Island biomes** — up to 3 desired surface biomes, with an **All / Any**
+  toggle (must contain every one, or at least one).
+- **Allowed ocean types** — which ocean biomes count as the isolating sea
+  (none selected = any ocean).
+- **Cave biomes** — desired underground biomes, with All / Any and a minimum
+  sample count.
+- **Stronghold** — optionally require the nearest first-ring stronghold to sit
+  on the island's land within a chosen distance. Realistic only at Huge/XXL,
+  since strongholds never generate within ~1,280 blocks of spawn.
+
+Matching seeds stream in live with their biome maps (white cross = spawn, red
+pin = stronghold). Tap a seed to copy it. Nothing is written to disk in this
+mode -- maps are rendered on demand. The page is served from `web/index.html`
+(embedded into the binary at build time) and streams over Server-Sent Events,
+so a long dry spell still shows live progress.
+
+## CLI
+
+For a one-off scan with the built-in default (mountain + lush-caves island):
 
     ./seedscan -n 5 -out matches
 
@@ -22,45 +55,26 @@ Flags:
     -n        stop after this many matches (default 5)
     -out      directory for the PNG maps (default ./matches)
     -workers  concurrent workers (default: CPU count)
-    -serve    run the mobile web UI instead of a one-off CLI scan
+    -serve    run the web UI instead of a one-off CLI scan
     -addr     address for the web UI (default :8080, used with -serve)
 
-## Web UI (control it from your phone)
+## How it works
 
-Run the scanner as a small web server on any machine with the build
-toolchain, then drive it from your phone's browser:
-
-    ./seedscan -serve
-
-Open `http://<that-machine's-LAN-IP>:8080` on your phone. Set the number of
-matches and workers, tap **Scan**, and matching seeds stream in live with
-their biome maps. Tap a seed to copy it. Nothing is written to disk in this
-mode -- maps are rendered on demand.
-
-The page is served from `web/index.html` (embedded into the binary at build
-time), and the scan streams over Server-Sent Events, so a long dry spell
-still shows live progress.
-
-## Tuning
-
-Everything worth adjusting lives at the top of `scan.c`:
-
-    RING_RADIUS     how far out the inner ocean check looks
-    RING_MIN_OCEAN  how much of that circle must be ocean (strictness)
-    OUTER_RADIUS    the wider isolation ring (keeps only lone islands)
-    OUTER_MIN_OCEAN how much of the wider circle must be ocean
-    ISLAND_RADIUS   how big an area counts as "the island"
-    MIN_LUSH        how much lush caves biome is required underground
-
-The two ocean rings are the main strictness dial. The inner ring just proves
-you spawn on an island; the outer ring (600 blocks) is what makes that island
-genuinely isolated rather than tucked against a nearby mainland. Raising
-OUTER_MIN_OCEAN or OUTER_RADIUS gives cleaner, lonelier islands but makes
-matches much rarer -- see the measured trade-offs noted next to the defines.
+Each seed runs through cheap-to-expensive stages in `scanner_check` (`scan.c`):
+an inner ocean ring, land at spawn, a wider isolation ring, one pass over the
+island footprint (surface biomes, cave biomes and land fraction), the spawn
+point, and finally the stronghold check. The search is described by a
+`ScanConfig` struct built on the Go side from the web menu; the size presets
+(radii, sample counts, ocean thresholds, land floor and map zoom) live in
+`sizePresets` in `server.go`, and the selectable biomes live in `catalog` in
+`main.go`.
 
 ## Known limits
 
-- Lush caves is a *biome*. cubiomes cannot confirm a cave was actually carved
+- Cave biomes are *biomes*. cubiomes cannot confirm a cave was actually carved
   there, so results are candidates, not guarantees. Check finalists in game.
-- Mountain height is inferred from peak-type biomes, not real terrain height.
-- `MC_VERSION` in scan.c must match an enum in cubiomes' generator.h.
+- Surface "mountains" are inferred from peak-type biomes, not real terrain
+  height.
+- Isolation is verified on ocean rings at fixed radii, so distant land can
+  still appear at the edges of the map (especially for continents).
+- `MC_VERSION` in `scan.c` must match an enum in cubiomes' `generator.h`.

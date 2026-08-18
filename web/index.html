@@ -8,137 +8,148 @@
 <title>seedscan</title>
 <style>
   :root {
-    --bg: #0f1216;
-    --panel: #181d24;
-    --panel-2: #1f2630;
-    --line: #2a323d;
-    --text: #e7ecf2;
-    --muted: #8b97a6;
-    --accent: #4ea1ff;
-    --accent-press: #2f7fe0;
-    --good: #57d98a;
+    --bg: #0f1216; --panel: #181d24; --panel-2: #1f2630; --line: #2a323d;
+    --text: #e7ecf2; --muted: #8b97a6; --accent: #4ea1ff; --accent-press: #2f7fe0;
+    --good: #57d98a; --chip-on: #23415f;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; }
   body {
-    background: var(--bg);
-    color: var(--text);
+    background: var(--bg); color: var(--text);
     font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
     padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   }
-  .wrap { max-width: 640px; margin: 0 auto; padding: 16px 14px 40px; }
-
+  .wrap { max-width: 680px; margin: 0 auto; padding: 16px 14px 48px; }
   header { display: flex; align-items: baseline; gap: 10px; margin-bottom: 14px; }
-  header h1 { font-size: 20px; margin: 0; letter-spacing: .2px; }
+  header h1 { font-size: 20px; margin: 0; }
   header p { margin: 0; color: var(--muted); font-size: 13px; }
 
-  .controls {
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: 14px;
-    padding: 14px;
-  }
-  .fields { display: flex; gap: 10px; }
-  /* min-width:0 lets the number inputs shrink below their wide intrinsic size,
-     otherwise they overflow the viewport on narrow phones. */
-  .field { flex: 1; min-width: 0; }
-  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
-  input {
-    width: 100%;
-    background: var(--panel-2);
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    color: var(--text);
-    font-size: 17px;
-    padding: 12px 12px;
-    -webkit-appearance: none;
-    appearance: none;
-  }
-  input:focus { outline: none; border-color: var(--accent); }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin-bottom: 12px; }
+  .group { margin-bottom: 16px; }
+  .group:last-child { margin-bottom: 0; }
+  .glabel { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+  .glabel span { font-size: 13px; color: var(--muted); }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
 
-  .btn {
-    display: flex; align-items: center; justify-content: center; gap: 8px;
-    width: 100%;
-    margin-top: 12px;
-    border: 0;
-    border-radius: 12px;
-    padding: 15px;
-    font-size: 17px;
-    font-weight: 600;
-    color: #071018;
-    background: var(--accent);
-    cursor: pointer;
-    touch-action: manipulation;
+  .chips { display: flex; flex-wrap: wrap; gap: 7px; }
+  .chip {
+    border: 1px solid var(--line); background: var(--panel-2); color: var(--text);
+    border-radius: 999px; padding: 8px 12px; font-size: 14px; cursor: pointer; user-select: none;
   }
+  .chip.on { background: var(--chip-on); border-color: var(--accent); }
+  .chip.disabled { opacity: .4; }
+
+  /* segmented control (size) */
+  .seg { display: flex; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .seg button { flex: 1; border: 0; background: transparent; color: var(--muted); padding: 11px 4px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .seg button.on { background: var(--accent); color: #071018; }
+
+  /* All/Any toggle */
+  .toggle { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .toggle button { border: 0; background: var(--panel-2); color: var(--muted); padding: 5px 12px; font-size: 12px; font-weight: 600; cursor: pointer; }
+  .toggle button.on { background: var(--accent); color: #071018; }
+
+  .row2 { display: flex; gap: 10px; }
+  .field { flex: 1; min-width: 0; }
+  label.fl { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  input[type=number] {
+    width: 100%; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px;
+    color: var(--text); font-size: 17px; padding: 12px; -webkit-appearance: none; appearance: none;
+  }
+  input[type=number]:focus { outline: none; border-color: var(--accent); }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+
+  .sw { display: flex; align-items: center; gap: 10px; }
+  .sw input { width: 20px; height: 20px; accent-color: var(--accent); }
+
+  .btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin-top: 4px;
+    border: 0; border-radius: 12px; padding: 15px; font-size: 17px; font-weight: 700; color: #071018;
+    background: var(--accent); cursor: pointer; touch-action: manipulation; }
   .btn:active { background: var(--accent-press); }
   .btn.stop { background: #35404d; color: var(--text); }
   .hidden { display: none !important; }
 
-  .status {
-    display: flex; align-items: center; gap: 14px;
-    margin: 16px 2px 6px;
-    color: var(--muted); font-size: 14px;
-  }
+  .status { display: flex; align-items: center; gap: 14px; margin: 4px 2px 6px; color: var(--muted); font-size: 14px; }
   .status b { color: var(--text); font-variant-numeric: tabular-nums; }
-  .spin {
-    width: 16px; height: 16px; border-radius: 50%;
-    border: 2px solid var(--line); border-top-color: var(--accent);
-    animation: spin .8s linear infinite;
-  }
+  .legend { font-size: 12px; color: var(--muted); margin-left: auto; }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 2px; vertical-align: middle; margin: 0 3px 2px 8px; border: 1px solid rgba(255,255,255,.4); }
+  .spin { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--accent); animation: spin .8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  .empty { color: var(--muted); text-align: center; padding: 40px 10px; font-size: 14px; }
-
-  .card {
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: 14px;
-    padding: 12px;
-    margin-top: 12px;
-    animation: pop .25s ease;
-  }
+  .empty { color: var(--muted); text-align: center; padding: 34px 10px; font-size: 14px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 12px; margin-top: 12px; animation: pop .25s ease; }
   @keyframes pop { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-  .card .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-  .seed {
-    font-size: 18px; font-weight: 700; letter-spacing: .2px;
-    font-variant-numeric: tabular-nums;
-    word-break: break-all;
-  }
-  .copy {
-    flex: none;
-    background: var(--panel-2); border: 1px solid var(--line);
-    color: var(--muted); border-radius: 8px;
-    padding: 7px 10px; font-size: 12px; cursor: pointer;
-  }
+  .card .top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .seed { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; word-break: break-all; }
+  .copy { flex: none; background: var(--panel-2); border: 1px solid var(--line); color: var(--muted); border-radius: 8px; padding: 7px 10px; font-size: 12px; cursor: pointer; }
   .copy.done { color: var(--good); border-color: var(--good); }
   .meta { color: var(--muted); font-size: 13px; margin-top: 4px; }
-  .card img {
-    display: block; width: 100%; height: auto;
-    margin-top: 10px; border-radius: 10px;
-    background: var(--panel-2);
-    image-rendering: pixelated;
-    aspect-ratio: 1 / 1;
-  }
+  .card img { display: block; width: 100%; height: auto; margin-top: 10px; border-radius: 10px; background: var(--panel-2); image-rendering: pixelated; aspect-ratio: 1/1; }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
     <h1>seedscan</h1>
-    <p>island · peaks · lush caves</p>
+    <p>survival island finder</p>
   </header>
 
-  <div class="controls">
-    <div class="fields">
-      <div class="field">
-        <label for="n">Matches</label>
-        <input id="n" type="number" inputmode="numeric" min="1" value="5">
+  <div class="panel">
+    <div class="group">
+      <div class="glabel"><span>Island size</span></div>
+      <div id="sizes" class="seg"></div>
+      <div id="sizeHint" class="hint"></div>
+    </div>
+
+    <div class="group">
+      <div class="glabel">
+        <span>Island biomes <em id="surfCount">(0/3)</em></span>
+        <div class="toggle" id="surfaceMode">
+          <button data-v="0" class="on">Any</button><button data-v="1">All</button>
+        </div>
       </div>
-      <div class="field">
-        <label for="workers">Workers</label>
-        <input id="workers" type="number" inputmode="numeric" min="1" placeholder="auto">
+      <div id="surface" class="chips"></div>
+    </div>
+
+    <div class="group">
+      <div class="glabel"><span>Allowed ocean types</span></div>
+      <div id="ocean" class="chips"></div>
+      <div class="hint">None selected = any ocean counts.</div>
+    </div>
+
+    <div class="group">
+      <div class="glabel">
+        <span>Cave biomes</span>
+        <div class="toggle" id="caveMode">
+          <button data-v="0" class="on">Any</button><button data-v="1">All</button>
+        </div>
+      </div>
+      <div id="cave" class="chips"></div>
+      <div class="row2" id="minCaveWrap" style="margin-top:10px">
+        <div class="field">
+          <label class="fl">Min cave samples</label>
+          <input id="minCave" type="number" inputmode="numeric" min="1" value="3">
+        </div>
       </div>
     </div>
+
+    <div class="group">
+      <div class="glabel"><span>Stronghold</span></div>
+      <label class="sw"><input type="checkbox" id="stronghold"> First stronghold on the island</label>
+      <div id="shWrap" class="hidden" style="margin-top:10px">
+        <label class="fl">Within <b id="shVal">1700</b> blocks</label>
+        <input id="shDist" type="range" min="1300" max="2400" step="50" value="1700">
+        <div class="hint">Best with Huge or Continent sizes — smaller islands can't reach a stronghold.</div>
+      </div>
+    </div>
+
+    <div class="group">
+      <div class="row2">
+        <div class="field"><label class="fl">Matches</label><input id="n" type="number" inputmode="numeric" min="1" value="5"></div>
+        <div class="field"><label class="fl">Workers</label><input id="workers" type="number" inputmode="numeric" min="1" placeholder="auto"></div>
+      </div>
+    </div>
+
     <button id="go" class="btn" onclick="start()">Scan</button>
     <button id="stop" class="btn stop hidden" onclick="stop()">Stop</button>
   </div>
@@ -147,100 +158,148 @@
     <span id="spin" class="spin hidden"></span>
     <span>tested <b id="tested">0</b></span>
     <span>found <b id="found">0</b></span>
+    <span class="legend"><span class="dot" style="background:#fff"></span>spawn<span class="dot" style="background:#e62828"></span>stronghold</span>
   </div>
 
   <div id="results"></div>
-  <div id="empty" class="empty">No matches yet. Tap Scan to start hunting.</div>
+  <div id="empty" class="empty">Pick your parameters and tap Scan.</div>
 </div>
 
 <script>
   const $ = (id) => document.getElementById(id);
   let es = null;
+  const state = { size: 'M', surfaceAll: 0, caveAll: 0, sizes: [] };
 
-  function setRunning(running) {
-    $('go').classList.toggle('hidden', running);
-    $('stop').classList.toggle('hidden', !running);
-    $('spin').classList.toggle('hidden', !running);
+  fetch('/api/biomes').then(r => r.json()).then(setup).catch(() => {
+    $('empty').textContent = 'Could not load biome list (is the server running?).';
+  });
+
+  function setup(d) {
+    state.sizes = d.sizes;
+    // size segmented control
+    const seg = $('sizes'); seg.innerHTML = '';
+    d.sizes.forEach(s => {
+      const b = document.createElement('button');
+      b.textContent = s.key; b.dataset.key = s.key;
+      if (s.key === state.size) b.classList.add('on');
+      b.onclick = () => { state.size = s.key; [...seg.children].forEach(c => c.classList.toggle('on', c.dataset.key === s.key)); updateSizeHint(); };
+      seg.appendChild(b);
+    });
+    updateSizeHint();
+    buildChips('surface', d.surface, d.maxSurface);
+    buildChips('ocean', d.ocean, 0);
+    buildChips('cave', d.cave, 0);
+    bindToggle('surfaceMode', v => state.surfaceAll = v);
+    bindToggle('caveMode', v => state.caveAll = v);
+    $('stronghold').onchange = () => $('shWrap').classList.toggle('hidden', !$('stronghold').checked);
+    $('shDist').oninput = () => $('shVal').textContent = $('shDist').value;
+  }
+
+  function updateSizeHint() {
+    const s = state.sizes.find(x => x.key === state.size);
+    $('sizeHint').textContent = s ? s.label + (s.key === 'XXL' ? ' — big enough to contain a stronghold' : '') : '';
+  }
+
+  function buildChips(cat, opts, max) {
+    const box = $(cat); box.innerHTML = '';
+    opts.forEach(o => {
+      const c = document.createElement('span');
+      c.className = 'chip'; c.textContent = o.label; c.dataset.key = o.key;
+      c.onclick = () => {
+        if (!c.classList.contains('on') && max > 0 && selected(cat).length >= max) return;
+        c.classList.toggle('on');
+        if (cat === 'surface') $('surfCount').textContent = '(' + selected('surface').length + '/' + max + ')';
+        if (cat === 'surface') refreshSurfaceDisable(max);
+      };
+      box.appendChild(c);
+    });
+  }
+
+  function refreshSurfaceDisable(max) {
+    const full = selected('surface').length >= max;
+    [...$('surface').children].forEach(c => c.classList.toggle('disabled', full && !c.classList.contains('on')));
+  }
+
+  function bindToggle(id, cb) {
+    const t = $(id);
+    [...t.children].forEach(b => b.onclick = () => {
+      [...t.children].forEach(x => x.classList.toggle('on', x === b));
+      cb(parseInt(b.dataset.v, 10));
+    });
+  }
+
+  function selected(cat) { return [...$(cat).children].filter(c => c.classList.contains('on')).map(c => c.dataset.key); }
+
+  function setRunning(r) {
+    $('go').classList.toggle('hidden', r);
+    $('stop').classList.toggle('hidden', !r);
+    $('spin').classList.toggle('hidden', !r);
   }
 
   function start() {
     if (es) es.close();
-
-    const n = Math.max(1, parseInt($('n').value, 10) || 5);
     const wRaw = parseInt($('workers').value, 10);
-    const workers = Number.isFinite(wRaw) && wRaw > 0 ? wRaw : 0;
+    const p = new URLSearchParams({
+      size: state.size,
+      surface: selected('surface').join(','),
+      surfaceAll: state.surfaceAll,
+      ocean: selected('ocean').join(','),
+      cave: selected('cave').join(','),
+      caveAll: state.caveAll,
+      minCave: Math.max(1, parseInt($('minCave').value, 10) || 3),
+      n: Math.max(1, parseInt($('n').value, 10) || 5),
+      workers: (Number.isFinite(wRaw) && wRaw > 0) ? wRaw : 0,
+    });
+    if ($('stronghold').checked) { p.set('stronghold', '1'); p.set('shDist', $('shDist').value); }
 
     $('results').innerHTML = '';
     $('empty').classList.add('hidden');
-    $('tested').textContent = '0';
-    $('found').textContent = '0';
+    $('tested').textContent = '0'; $('found').textContent = '0';
     setRunning(true);
 
-    const qs = new URLSearchParams({ n, workers });
-    es = new EventSource('/api/scan?' + qs.toString());
-
-    es.addEventListener('progress', (e) => {
-      $('tested').textContent = fmt(JSON.parse(e.data).tested);
-    });
-    es.addEventListener('match', (e) => addMatch(JSON.parse(e.data)));
-    es.addEventListener('done', (e) => {
-      $('tested').textContent = fmt(JSON.parse(e.data).tested);
-      stop();
-    });
-    es.onerror = () => stop(); // connection ended (done, stopped, or dropped)
+    es = new EventSource('/api/scan?' + p.toString());
+    es.addEventListener('progress', e => { $('tested').textContent = fmt(JSON.parse(e.data).tested); });
+    es.addEventListener('match', e => addMatch(JSON.parse(e.data)));
+    es.addEventListener('done', e => { $('tested').textContent = fmt(JSON.parse(e.data).tested); stop(); });
+    es.onerror = () => stop();
   }
 
   function stop() {
     if (es) { es.close(); es = null; }
     setRunning(false);
-    if (!$('results').children.length) $('empty').classList.remove('hidden');
+    if (!$('results').children.length) { $('empty').textContent = 'No matches this run. Try loosening the filters.'; $('empty').classList.remove('hidden'); }
   }
 
   function addMatch(m) {
     $('found').textContent = String((parseInt($('found').textContent, 10) || 0) + 1);
-    const url = `/api/map?seed=${m.seed}&sx=${m.spawnX}&sz=${m.spawnZ}`;
+    const q = new URLSearchParams({ seed: m.seed, step: m.step, sx: m.spawnX, sz: m.spawnZ });
+    if (m.hasStronghold) { q.set('st', '1'); q.set('stx', m.strongholdX); q.set('stz', m.strongholdZ); }
 
-    const card = document.createElement('div');
-    card.className = 'card';
-
-    const row = document.createElement('div');
-    row.className = 'row';
-    const seed = document.createElement('span');
-    seed.className = 'seed';
-    seed.textContent = m.seed;
-    const copy = document.createElement('button');
-    copy.className = 'copy';
-    copy.textContent = 'Copy';
+    const card = document.createElement('div'); card.className = 'card';
+    const top = document.createElement('div'); top.className = 'top';
+    const seed = document.createElement('span'); seed.className = 'seed'; seed.textContent = m.seed;
+    const copy = document.createElement('button'); copy.className = 'copy'; copy.textContent = 'Copy';
     copy.onclick = () => copySeed(String(m.seed), copy);
-    row.append(seed, copy);
+    top.append(seed, copy);
 
-    const meta = document.createElement('div');
-    meta.className = 'meta';
-    meta.textContent = `spawn ${m.spawnX}, ${m.spawnZ}  ·  lush ${m.lush}`;
+    const meta = document.createElement('div'); meta.className = 'meta';
+    let t = `spawn ${m.spawnX}, ${m.spawnZ}`;
+    if (m.caves > 0) t += `  ·  caves ${m.caves}`;
+    if (m.hasStronghold) t += `  ·  stronghold ${m.strongholdDist} blocks`;
+    meta.textContent = t;
 
-    const img = document.createElement('img');
-    img.loading = 'lazy';
-    img.alt = 'biome map for seed ' + m.seed;
-    img.src = url;
+    const img = document.createElement('img'); img.loading = 'lazy';
+    img.alt = 'map for seed ' + m.seed; img.src = '/api/map?' + q.toString();
 
-    card.append(row, meta, img);
+    card.append(top, meta, img);
     $('results').prepend(card);
   }
 
   function copySeed(text, btn) {
     const ok = () => { btn.textContent = 'Copied'; btn.classList.add('done'); setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('done'); }, 1200); };
-    if (navigator.clipboard) navigator.clipboard.writeText(text).then(ok, () => fallbackCopy(text, ok));
-    else fallbackCopy(text, ok);
+    if (navigator.clipboard) navigator.clipboard.writeText(text).then(ok, () => fb(text, ok)); else fb(text, ok);
   }
-
-  function fallbackCopy(text, ok) {
-    const ta = document.createElement('textarea');
-    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
-    document.body.appendChild(ta); ta.select();
-    try { document.execCommand('copy'); ok(); } catch (_) {}
-    document.body.removeChild(ta);
-  }
-
+  function fb(text, ok) { const ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); ok(); } catch (_) {} document.body.removeChild(ta); }
   function fmt(n) { return Number(n).toLocaleString(); }
 </script>
 </body>

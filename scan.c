@@ -8,35 +8,9 @@
 #include <string.h>
 #include <math.h>
 
-/* ---- tunables -------------------------------------------------------- */
-
-#define MC_VERSION      MC_1_21   /* check generator.h for the exact enum */
-
-#define RING_RADIUS     250       /* blocks out from origin we test for ocean */
-#define RING_SAMPLES    32        /* points around that circle */
-#define RING_MIN_OCEAN  30        /* how many must be ocean (30 of 32) */
-
-/* Second, wider ocean ring. The inner ring only proves sea out to 250 blocks,
- * which lets a "match" sit just off a mainland. This outer ring pushes the
- * guaranteed ocean out to OUTER_RADIUS, so hits are genuinely isolated islands.
- * Measured trade-off (fraction of islands that also clear this ring, and the
- * resulting match rate vs the ~1-in-2.3M inner-only baseline):
- *     r=600, >=38/48 (80%)  -> ~33%   ~1 in 7.0M   (the default below)
- *     r=600, >=43/48 (90%)  -> ~16%   ~1 in 14M    (tighter, cleaner ring)
- *     r=700, >=43/48 (90%)  -> ~8%    ~1 in 28M    (very isolated, slow)
- * Raise OUTER_MIN_OCEAN or OUTER_RADIUS for stricter isolation at the cost of
- * rarer hits. */
-#define OUTER_RADIUS    600       /* wider ocean ring, for true isolation */
-#define OUTER_SAMPLES   48        /* points around the wider circle */
-#define OUTER_MIN_OCEAN 38        /* how many must be ocean (~80% of 48) */
-
-#define ISLAND_RADIUS   200       /* area we consider "the island" */
-#define GRID_STEP       16        /* sample spacing inside the island */
-
-#define SURFACE_Y       60        /* height for surface biome lookups */
-#define CAVE_Y         (-50)      /* height for cave biome lookups */
-
-#define MIN_LUSH        3         /* sample points that must hit lush caves */
+#define MC_VERSION  MC_1_21   /* check generator.h for the exact enum */
+#define SURFACE_Y   60        /* height for surface biome lookups */
+#define CAVE_Y     (-50)      /* height for cave biome lookups */
 
 /* ---- helpers --------------------------------------------------------- */
 
@@ -49,37 +23,47 @@ static int biome_at_block(Generator *g, int bx, int by, int bz)
     return getBiomeAt(g, 4, bx >> 2, by >> 2, bz >> 2);
 }
 
+static int in_list(int id, const int *list, int n)
+{
+    for (int i = 0; i < n; i++)
+        if (list[i] == id) return 1;
+    return 0;
+}
+
+/* Every ocean biome, used for "is this land?" tests regardless of which ocean
+ * types the user allows around their island. */
 static int is_ocean(int id)
 {
     switch (id) {
-    case ocean:
-    case deep_ocean:
-    case cold_ocean:
-    case deep_cold_ocean:
-    case lukewarm_ocean:
-    case deep_lukewarm_ocean:
-    case warm_ocean:
-    case frozen_ocean:
-    case deep_frozen_ocean:
+    case ocean: case deep_ocean: case cold_ocean: case deep_cold_ocean:
+    case lukewarm_ocean: case deep_lukewarm_ocean: case warm_ocean:
+    case frozen_ocean: case deep_frozen_ocean:
         return 1;
     default:
         return 0;
     }
 }
 
-static int is_peak(int id)
+/* Whether a biome counts as ocean for the isolation rings. With no ocean types
+ * chosen, any ocean qualifies; otherwise only the chosen ones do. */
+static int is_ring_ocean(const ScanConfig *cfg, int id)
 {
-    switch (id) {
-    case jagged_peaks:
-    case frozen_peaks:
-    case stony_peaks:
-    case snowy_slopes:
-    case windswept_hills:
-    case windswept_gravelly_hills:
-        return 1;
-    default:
-        return 0;
+    if (cfg->nOcean == 0) return is_ocean(id);
+    return in_list(id, cfg->ocean, cfg->nOcean);
+}
+
+/* Counts how many of `samples` points on a circle of `radius` are ring-ocean. */
+static int ocean_ring(Generator *g, const ScanConfig *cfg, int radius, int samples)
+{
+    int hits = 0;
+    for (int i = 0; i < samples; i++) {
+        double a = 2.0 * M_PI * i / samples;
+        int x = (int)(cos(a) * radius);
+        int z = (int)(sin(a) * radius);
+        if (is_ring_ocean(cfg, biome_at_block(g, x, SURFACE_Y, z)))
+            hits++;
     }
+    return hits;
 }
 
 /* ---- lifecycle ------------------------------------------------------- */
@@ -99,7 +83,7 @@ void scanner_free(void *s)
 
 /* ---- the actual filter ----------------------------------------------- */
 
-ScanResult scanner_check(void *s, uint64_t seed)
+ScanResult scanner_check(void *s, uint64_t seed, const ScanConfig *cfg)
 {
     Generator *g = (Generator *)s;
     ScanResult r;
@@ -107,71 +91,112 @@ ScanResult scanner_check(void *s, uint64_t seed)
 
     applySeed(g, DIM_OVERWORLD, seed);
 
-    /* 1. Ocean ring. Cheapest test, so it goes first -- it throws away the
-     *    overwhelming majority of seeds for 32 lookups. */
-    int oceanHits = 0;
-    for (int i = 0; i < RING_SAMPLES; i++) {
-        double a = 2.0 * M_PI * i / RING_SAMPLES;
-        int x = (int)(cos(a) * RING_RADIUS);
-        int z = (int)(sin(a) * RING_RADIUS);
-        if (is_ocean(biome_at_block(g, x, SURFACE_Y, z)))
-            oceanHits++;
-    }
-    if (oceanHits < RING_MIN_OCEAN)
+    /* 1. Inner ocean ring. Cheapest test, so it goes first. */
+    if (cfg->ringSamples > 0 &&
+        ocean_ring(g, cfg, cfg->ringRadius, cfg->ringSamples) < cfg->ringMinOcean)
         return r;
 
     /* 2. Land in the middle -- otherwise it is just open sea. */
     if (is_ocean(biome_at_block(g, 0, SURFACE_Y, 0)))
         return r;
 
-    /* 2b. Wider ocean ring. Rejects a small island tucked against a mainland,
-     *     keeping only genuinely isolated ones. Still far cheaper per rejection
-     *     than the island footprint scan below, so it runs before it. */
-    int outerOcean = 0;
-    for (int i = 0; i < OUTER_SAMPLES; i++) {
-        double a = 2.0 * M_PI * i / OUTER_SAMPLES;
-        int x = (int)(cos(a) * OUTER_RADIUS);
-        int z = (int)(sin(a) * OUTER_RADIUS);
-        if (is_ocean(biome_at_block(g, x, SURFACE_Y, z)))
-            outerOcean++;
-    }
-    if (outerOcean < OUTER_MIN_OCEAN)
+    /* 3. Outer isolation ring, if enabled. */
+    if (cfg->outerSamples > 0 &&
+        ocean_ring(g, cfg, cfg->outerRadius, cfg->outerSamples) < cfg->outerMinOcean)
         return r;
 
-    /* 3 & 4. One pass over the island footprint, collecting both the surface
-     *        biome and the cave biome underneath the same point. Doing them
-     *        together halves the loop overhead. */
-    int peakFound = 0, peakBiome = 0, lush = 0;
-    for (int x = -ISLAND_RADIUS; x <= ISLAND_RADIUS; x += GRID_STEP) {
-        for (int z = -ISLAND_RADIUS; z <= ISLAND_RADIUS; z += GRID_STEP) {
-            if (x * x + z * z > ISLAND_RADIUS * ISLAND_RADIUS)
+    /* 4. One pass over the island footprint, gathering which desired surface
+     *    biomes appear and how many sample points hit each desired cave biome. */
+    unsigned surfaceSeen = 0;                 /* bit i = cfg->surface[i] seen */
+    int caveHits[SCAN_MAX_LIST];
+    memset(caveHits, 0, sizeof(caveHits));
+    int caveTotal = 0;
+    int landCount = 0, sampleCount = 0;
+    int step = cfg->gridStep > 0 ? cfg->gridStep : 16;
+
+    for (int x = -cfg->islandRadius; x <= cfg->islandRadius; x += step) {
+        for (int z = -cfg->islandRadius; z <= cfg->islandRadius; z += step) {
+            if (x * x + z * z > cfg->islandRadius * cfg->islandRadius)
                 continue;   /* circle, not square */
 
-            int b = biome_at_block(g, x, SURFACE_Y, z);
-            if (!peakFound && is_peak(b)) {
-                peakFound = 1;
-                peakBiome = b;
+            int surf = biome_at_block(g, x, SURFACE_Y, z);
+            sampleCount++;
+            if (!is_ocean(surf)) landCount++;
+
+            if (cfg->nSurface > 0) {
+                for (int i = 0; i < cfg->nSurface; i++)
+                    if (cfg->surface[i] == surf) surfaceSeen |= (1u << i);
             }
-            if (biome_at_block(g, x, CAVE_Y, z) == lush_caves)
-                lush++;
+            if (cfg->nCave > 0) {
+                int c = biome_at_block(g, x, CAVE_Y, z);
+                for (int i = 0; i < cfg->nCave; i++)
+                    if (cfg->cave[i] == c) { caveHits[i]++; caveTotal++; }
+            }
         }
     }
-    if (!peakFound || lush < MIN_LUSH)
+
+    /* Landmass size floor: enough of the footprint must be land. */
+    if (cfg->minLandPercent > 0 && sampleCount > 0 &&
+        landCount * 100 < cfg->minLandPercent * sampleCount)
         return r;
 
-    /* 5. Spawn point last -- it is by far the most expensive call here, so it
-     *    only ever runs on seeds that already look promising. */
+    /* Surface biome requirement. */
+    if (cfg->nSurface > 0) {
+        unsigned full = (cfg->nSurface >= 32) ? ~0u : ((1u << cfg->nSurface) - 1);
+        if (cfg->matchAllSurface) {
+            if (surfaceSeen != full) return r;
+        } else {
+            if (surfaceSeen == 0) return r;
+        }
+    }
+
+    /* Cave biome requirement. */
+    if (cfg->nCave > 0) {
+        if (cfg->matchAllCave) {
+            for (int i = 0; i < cfg->nCave; i++)
+                if (caveHits[i] < 1) return r;
+        } else {
+            if (caveTotal < cfg->minCave) return r;
+        }
+    }
+    r.caveCount = caveTotal;
+
+    /* 5. Spawn point -- must land on the island, not in the surrounding sea. */
     Pos p = getSpawn(g);
-    if (abs(p.x) > ISLAND_RADIUS || abs(p.z) > ISLAND_RADIUS)
+    if (abs(p.x) > cfg->islandRadius || abs(p.z) > cfg->islandRadius)
         return r;
     if (is_ocean(biome_at_block(g, p.x, SURFACE_Y, p.z)))
         return r;
+    r.spawnX = p.x;
+    r.spawnZ = p.z;
 
-    r.match     = 1;
-    r.spawnX    = p.x;
-    r.spawnZ    = p.z;
-    r.peakBiome = peakBiome;
-    r.lushCount = lush;
+    /* 6. Stronghold containment (continent mode). The nearest of the first-ring
+     *    strongholds must sit on land within strongholdMaxDist. Most expensive
+     *    check, so it runs last on already-promising seeds. */
+    if (cfg->requireStronghold) {
+        StrongholdIter sh;
+        initFirstStronghold(&sh, MC_VERSION, seed);
+        double best = 1e18;
+        int bx = 0, bz = 0, onLand = 0;
+        for (int i = 0; i < 3; i++) {          /* first ring holds 3 strongholds */
+            if (!nextStronghold(&sh, g)) break;
+            double d = sqrt((double)sh.pos.x * sh.pos.x +
+                            (double)sh.pos.z * sh.pos.z);
+            if (d < best) {
+                best = d;
+                bx = sh.pos.x;
+                bz = sh.pos.z;
+                onLand = !is_ocean(biome_at_block(g, bx, SURFACE_Y, bz));
+            }
+        }
+        if (best > cfg->strongholdMaxDist || !onLand)
+            return r;
+        r.hasStronghold = 1;
+        r.strongholdX = bx;
+        r.strongholdZ = bz;
+    }
+
+    r.match = 1;
     return r;
 }
 
