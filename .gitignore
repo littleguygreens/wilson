@@ -1,0 +1,9 @@
+# vendored C library - cloned at build time, not committed
+cubiomes/
+
+# compiled binary
+seedscan
+
+# scan output
+matches/
+*.png
