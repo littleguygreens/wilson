@@ -210,14 +210,28 @@ func renderImage(s unsafe.Pointer, seed uint64, spawnX, spawnZ int) *image.RGBA 
 		}
 	}
 
-	// Mark spawn with a small white cross.
+	// Mark spawn with a bold white cross wrapped in a dark halo, so it stays
+	// legible whether it lands on green, blue or sandy terrain. SetRGBA already
+	// ignores out-of-bounds points, so no edge guard is needed.
 	half := mapSize / 2
 	sx := half + spawnX/mapStep
 	sz := half + spawnZ/mapStep
+	const arm = 7
+	black := color.RGBA{0, 0, 0, 255}
 	white := color.RGBA{255, 255, 255, 255}
-	for d := -4; d <= 4; d++ {
-		img.SetRGBA(sx+d, sz, white)
-		img.SetRGBA(sx, sz+d, white)
+	// Halo first: a fatter black cross underneath.
+	for d := -arm - 1; d <= arm+1; d++ {
+		for t := -2; t <= 2; t++ {
+			img.SetRGBA(sx+d, sz+t, black)
+			img.SetRGBA(sx+t, sz+d, black)
+		}
+	}
+	// White cross on top, 3px thick.
+	for d := -arm; d <= arm; d++ {
+		for t := -1; t <= 1; t++ {
+			img.SetRGBA(sx+d, sz+t, white)
+			img.SetRGBA(sx+t, sz+d, white)
+		}
 	}
 	return img
 }
