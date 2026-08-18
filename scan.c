@@ -341,6 +341,13 @@ ScanResult scanner_check(void *s, uint64_t seed, const ScanConfig *cfg)
     return r;
 }
 
+int scanner_biome(void *s, uint64_t seed, int x, int y, int z)
+{
+    Generator *g = (Generator *)s;
+    applySeed(g, DIM_OVERWORLD, seed);
+    return biome_at_block(g, x, y, z);
+}
+
 /* ---- map rendering support ------------------------------------------- */
 
 void scanner_biome_grid(void *s, uint64_t seed, int size, int step,

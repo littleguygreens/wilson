@@ -107,6 +107,7 @@ func runServer(addr string) error {
 	mux.HandleFunc("/api/biomes", biomesHandler)
 	mux.HandleFunc("/api/scan", scanHandler)
 	mux.HandleFunc("/api/map", mapHandler)
+	mux.HandleFunc("/api/biome", biomeHandler)
 
 	log.Printf("wilson web UI on http://localhost%s  (open it from your phone using this machine's LAN IP)", addr)
 	return http.ListenAndServe(addr, mux)
@@ -327,6 +328,22 @@ func mapHandler(w http.ResponseWriter, r *http.Request) {
 	if err := renderPNG(w, uint64(seed), step, spawn, sh); err != nil {
 		log.Printf("render map for seed %d: %v", seed, err)
 	}
+}
+
+// biomeHandler returns the biome id and name at a block coordinate, for the
+// map hover tooltip. y defaults to the surface height.
+func biomeHandler(w http.ResponseWriter, r *http.Request) {
+	seed, err := strconv.ParseInt(r.URL.Query().Get("seed"), 10, 64)
+	if err != nil {
+		http.Error(w, "bad seed", http.StatusBadRequest)
+		return
+	}
+	x := queryInt(r, "x", 0)
+	z := queryInt(r, "z", 0)
+	y := queryInt(r, "y", 60)
+	id, name := biomeAt(uint64(seed), x, y, z)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{"id": id, "name": name})
 }
 
 // sseWriter serialises event writes across the ticker and scan goroutines.

@@ -88,7 +88,9 @@
   .copy { flex: none; background: var(--panel-2); border: 1px solid var(--line); color: var(--muted); border-radius: 8px; padding: 7px 10px; font-size: 12px; cursor: pointer; }
   .copy.done { color: var(--good); border-color: var(--good); }
   .meta { color: var(--muted); font-size: 13px; margin-top: 4px; }
-  .card img { display: block; width: 100%; height: auto; margin-top: 10px; border-radius: 10px; background: var(--panel-2); image-rendering: pixelated; aspect-ratio: 1/1; }
+  .card img { display: block; width: 100%; height: auto; margin-top: 10px; border-radius: 10px; background: var(--panel-2); image-rendering: pixelated; aspect-ratio: 1/1; cursor: crosshair; }
+  .tip { position: fixed; z-index: 50; pointer-events: none; display: none; background: #0b0e12; color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 5px 9px; font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; box-shadow: 0 6px 18px rgba(0,0,0,.5); }
+  .tip b { color: var(--accent); }
 </style>
 </head>
 <body>
@@ -417,6 +419,9 @@
 
     const img = document.createElement('img'); img.loading = 'lazy';
     img.alt = 'map for seed ' + m.seed; img.src = '/api/map?' + q.toString();
+    img.dataset.seed = m.seed; img.dataset.step = m.step;
+    img.addEventListener('pointermove', onMapHover);
+    img.addEventListener('pointerleave', hideTip);
 
     card.append(top, meta, img);
     $('results').prepend(card);
@@ -428,6 +433,46 @@
   }
   function fb(text, ok) { const ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); ok(); } catch (_) {} document.body.removeChild(ta); }
   function fmt(n) { return Number(n).toLocaleString(); }
+
+  // ---- map hover tooltip (coords + biome) ---------------------------------
+  let tipEl = null, tipState = null, tipReqToken = 0, tipLastCell = '';
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const prettyBiome = (s) => (s || '').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+
+  function tip() {
+    if (!tipEl) { tipEl = document.createElement('div'); tipEl.className = 'tip'; document.body.appendChild(tipEl); }
+    return tipEl;
+  }
+  function renderTip() {
+    if (!tipState) return;
+    const t = tip(), { img, bx, bz, cx, cy } = tipState;
+    t.style.display = 'block';
+    t.style.left = (cx + 14) + 'px';
+    t.style.top = (cy + 14) + 'px';
+    t.innerHTML = `${bx}, ${bz}` + (img._biome ? `  ·  <b>${img._biome}</b>` : '');
+  }
+  function hideTip() { tipState = null; tipLastCell = ''; if (tipEl) tipEl.style.display = 'none'; }
+
+  function onMapHover(e) {
+    const img = e.currentTarget, rect = img.getBoundingClientRect();
+    if (!rect.width) return;
+    const nx = clamp(Math.floor((e.clientX - rect.left) / rect.width * 512), 0, 511);
+    const ny = clamp(Math.floor((e.clientY - rect.top) / rect.height * 512), 0, 511);
+    const step = parseInt(img.dataset.step, 10) || 4;
+    const bx = (nx - 256) * step, bz = (ny - 256) * step;
+    tipState = { img, bx, bz, cx: e.clientX, cy: e.clientY };
+    renderTip();
+
+    // Only fetch the biome when the block cell changes.
+    const cell = img.dataset.seed + '|' + bx + '|' + bz;
+    if (cell === tipLastCell) return;
+    tipLastCell = cell;
+    const token = ++tipReqToken;
+    fetch(`/api/biome?seed=${encodeURIComponent(img.dataset.seed)}&x=${bx}&z=${bz}`)
+      .then((r) => r.json())
+      .then((d) => { if (token !== tipReqToken) return; img._biome = prettyBiome(d.name); renderTip(); })
+      .catch(() => {});
+  }
 </script>
 </body>
 </html>

@@ -81,6 +81,9 @@ void        scanner_free(void *s);
 
 ScanResult  scanner_check(void *s, uint64_t seed, const ScanConfig *cfg);
 
+/* Biome id at a single block coordinate (for the hover tooltip). */
+int         scanner_biome(void *s, uint64_t seed, int x, int y, int z);
+
 /* Fills out[size*size] with biome ids for a square centred on 0,0.
  * step = blocks per pixel. y = block height to sample at. */
 void        scanner_biome_grid(void *s, uint64_t seed, int size, int step,

@@ -50,7 +50,8 @@ parameters:
   since strongholds never generate within ~1,280 blocks of spawn.
 
 Matching seeds stream in live with their biome maps (white cross = spawn, red
-pin = stronghold). Tap a seed to copy it. Nothing is written to disk in this
+pin = stronghold). Tap a seed to copy it. Hover the map to read the block
+coordinates and biome under the cursor. Nothing is written to disk in this
 mode -- maps are rendered on demand. The page is served from `web/index.html`
 (embedded into the binary at build time) and streams over Server-Sent Events,
 so a long dry spell still shows live progress.

@@ -4,7 +4,8 @@ package main
 #cgo CFLAGS: -I${SRCDIR}/cubiomes -O3
 #cgo LDFLAGS: -L${SRCDIR}/cubiomes -lcubiomes -lm
 #include <stdlib.h>
-#include "biomes.h"
+#include "generator.h"
+#include "util.h"
 #include "scan.h"
 */
 import "C"
@@ -514,4 +515,20 @@ func renderPNG(w io.Writer, seed uint64, step int, spawn marker, sh *marker) err
 	defer C.scanner_free(s)
 	img := renderImage(s, seed, step, spawn, sh)
 	return png.Encode(w, img)
+}
+
+// biomeGenPool reuses generators across biome lookups so each hover request
+// doesn't rebuild one from scratch. Pooled generators live for the process.
+var biomeGenPool = sync.Pool{New: func() any { return C.scanner_new() }}
+
+// biomeAt returns the biome id and name at a block coordinate for one seed.
+func biomeAt(seed uint64, x, y, z int) (int, string) {
+	s := biomeGenPool.Get().(unsafe.Pointer)
+	defer biomeGenPool.Put(s)
+	id := int(C.scanner_biome(s, C.uint64_t(seed), C.int(x), C.int(y), C.int(z)))
+	name := C.GoString(C.biome2str(C.MC_1_21, C.int(id)))
+	if name == "" {
+		name = fmt.Sprintf("biome %d", id)
+	}
+	return id, name
 }
