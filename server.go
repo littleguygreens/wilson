@@ -208,20 +208,23 @@ func configFromQuery(r *http.Request) Config {
 	return cfg
 }
 
-// matchDTO is the JSON shape sent to the browser for each matching seed.
+// matchDTO is the JSON shape sent to the browser for each matching seed. Seed is
+// a string, not a number: JSON numbers become 64-bit floats in the browser,
+// which lose the low bits of a full 64-bit Minecraft seed and would point at a
+// different (usually non-island) seed.
 type matchDTO struct {
-	Seed           int64 `json:"seed"`
-	SpawnX         int   `json:"spawnX"`
-	SpawnZ         int   `json:"spawnZ"`
-	Caves          int   `json:"caves"`
-	Step           int   `json:"step"`
-	HasStronghold  bool  `json:"hasStronghold"`
-	StrongholdX    int   `json:"strongholdX"`
-	StrongholdZ    int   `json:"strongholdZ"`
-	StrongholdDist int   `json:"strongholdDist"`
-	IslandBlocks   int64 `json:"islandBlocks"`
-	Enclosed       bool  `json:"enclosed"`
-	Moat           int   `json:"moat"` // sea gap to nearest other land; -1 = open
+	Seed           string `json:"seed"`
+	SpawnX         int    `json:"spawnX"`
+	SpawnZ         int    `json:"spawnZ"`
+	Caves          int    `json:"caves"`
+	Step           int    `json:"step"`
+	HasStronghold  bool   `json:"hasStronghold"`
+	StrongholdX    int    `json:"strongholdX"`
+	StrongholdZ    int    `json:"strongholdZ"`
+	StrongholdDist int    `json:"strongholdDist"`
+	IslandBlocks   int64  `json:"islandBlocks"`
+	Enclosed       bool   `json:"enclosed"`
+	Moat           int    `json:"moat"` // sea gap to nearest other land; -1 = open
 }
 
 // scanHandler streams scan results as Server-Sent Events, tied to the request
@@ -279,7 +282,7 @@ func scanHandler(w http.ResponseWriter, r *http.Request) {
 		found++
 		dist := int(math.Round(math.Hypot(float64(h.strongholdX), float64(h.strongholdZ))))
 		sw.send("match", matchDTO{
-			Seed:           int64(h.seed),
+			Seed:           strconv.FormatInt(int64(h.seed), 10),
 			SpawnX:         h.spawnX,
 			SpawnZ:         h.spawnZ,
 			Caves:          h.caveCount,
