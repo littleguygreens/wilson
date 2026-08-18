@@ -66,27 +66,31 @@ static int ocean_ring(Generator *g, const ScanConfig *cfg, int radius, int sampl
     return hits;
 }
 
-/* Flood-fills the land connected to spawn (the origin) across a square window
- * and decides whether that land blob is entirely ringed by ocean. Returns 1 if
- * enclosed, 0 otherwise; writes the blob's cell count to *cells.
+/* Measures the spawn island across a square window: whether its land blob is
+ * complete (does not touch the window edge, i.e. not a peninsula), its cell
+ * count, and its "moat" -- the shortest ocean gap in blocks to any OTHER
+ * landmass (-1 if no other land lies within the window).
  *
- * Unlike an ocean-ring percentage, this catches a peninsula: a land bridge of
- * any width joins the blob to the mainland, the fill follows it to the window
- * edge, and touching the edge means "land continues beyond what we can see" ->
- * not enclosed. 8-connectivity is used so even a diagonal bridge is followed. */
-static int island_enclosed(Generator *g, int window, int step, int minCells,
-                           int *cells)
+ * Two passes over the same grid: an 8-connected flood fill from spawn marks the
+ * island (catching land bridges of any width -- the fill follows a bridge to
+ * the edge), then a multi-source BFS outward through ocean finds the nearest
+ * cell of a different landmass. */
+static void island_metrics(Generator *g, int window, int step,
+                           int *complete, int *cells, int *moat)
 {
+    *complete = 1;
     *cells = 0;
+    *moat = -1;
     if (window <= 0 || step <= 0)
-        return 1;                       /* check disabled */
+        return;                         /* check disabled */
 
     int n = 2 * (window / step) + 1;    /* odd, so the centre cell is spawn */
     int c = n / 2;
 
-    unsigned char *land = malloc((size_t)n * n);
-    int *stack = malloc(sizeof(int) * (size_t)n * n);
-    if (!land || !stack) { free(land); free(stack); return 0; }
+    unsigned char *land = malloc((size_t)n * n);   /* 0 ocean, 1 land, 2 island */
+    int *queue = malloc(sizeof(int) * (size_t)n * n);
+    int *dist = malloc(sizeof(int) * (size_t)n * n);
+    if (!land || !queue || !dist) { free(land); free(queue); free(dist); *complete = 0; return; }
 
     for (int j = 0; j < n; j++)
         for (int i = 0; i < n; i++) {
@@ -95,36 +99,62 @@ static int island_enclosed(Generator *g, int window, int step, int minCells,
             land[j * n + i] = is_ocean(biome_at_block(g, bx, SURFACE_Y, bz)) ? 0 : 1;
         }
 
-    int enclosed = 1, area = 0, top = 0;
-    if (land[c * n + c]) {              /* spawn is land (it should be) */
+    /* Pass 1: flood-fill the spawn island (8-connected). */
+    int area = 0, top = 0;
+    if (land[c * n + c]) {
         land[c * n + c] = 2;
-        stack[top++] = c * n + c;
+        queue[top++] = c * n + c;
     }
     while (top > 0) {
-        int idx = stack[--top];
+        int idx = queue[--top];
         int i = idx % n, j = idx / n;
         area++;
         if (i == 0 || j == 0 || i == n - 1 || j == n - 1)
-            enclosed = 0;              /* blob reaches the edge -> a bridge out */
+            *complete = 0;             /* blob reaches the edge -> a bridge out */
         for (int dj = -1; dj <= 1; dj++)
             for (int di = -1; di <= 1; di++) {
                 if (!di && !dj) continue;
                 int ni = i + di, nj = j + dj;
                 if (ni < 0 || nj < 0 || ni >= n || nj >= n) continue;
-                int nidx = nj * n + ni;
-                if (land[nidx] == 1) {
-                    land[nidx] = 2;
-                    stack[top++] = nidx;
-                }
+                int k = nj * n + ni;
+                if (land[k] == 1) { land[k] = 2; queue[top++] = k; }
             }
+    }
+    *cells = area;
+
+    /* Pass 2: BFS out through ocean from the island; the first other-land cell
+     * we touch gives the shortest gap. Seed with ocean cells next to the island. */
+    for (int i = 0; i < n * n; i++) dist[i] = -1;
+    int head = 0, tail = 0;
+    for (int j = 0; j < n; j++)
+        for (int i = 0; i < n; i++) {
+            if (land[j * n + i] != 2) continue;
+            for (int dj = -1; dj <= 1; dj++)
+                for (int di = -1; di <= 1; di++) {
+                    int ni = i + di, nj = j + dj;
+                    if (ni < 0 || nj < 0 || ni >= n || nj >= n) continue;
+                    int k = nj * n + ni;
+                    if (land[k] == 0 && dist[k] < 0) { dist[k] = 1; queue[tail++] = k; }
+                }
+        }
+    while (head < tail && *moat < 0) {
+        int idx = queue[head++];
+        int i = idx % n, j = idx / n, d = dist[idx];
+        for (int dj = -1; dj <= 1; dj++)
+            for (int di = -1; di <= 1; di++) {
+                if (!di && !dj) continue;
+                int ni = i + di, nj = j + dj;
+                if (ni < 0 || nj < 0 || ni >= n || nj >= n) continue;
+                int k = nj * n + ni;
+                if (land[k] == 1) { *moat = d * step; break; }   /* other land */
+                if (land[k] == 0 && dist[k] < 0) { dist[k] = d + 1; queue[tail++] = k; }
+            }
+        if (*moat >= 0) break;
     }
 
     free(land);
-    free(stack);
-    *cells = area;
-    if (!enclosed) return 0;
-    if (minCells > 0 && area < minCells) return 0;
-    return 1;
+    free(queue);
+    free(dist);
 }
 
 /* ---- lifecycle ------------------------------------------------------- */
@@ -235,11 +265,18 @@ ScanResult scanner_check(void *s, uint64_t seed, const ScanConfig *cfg)
      *     require it to be fully ringed by ocean, not joined to a mainland by a
      *     land bridge the rings would miss. Expensive, so it runs late. */
     if (cfg->requireEnclosed) {
-        int cells = 0;
-        if (!island_enclosed(g, cfg->islandWindow, cfg->islandStep,
-                             cfg->minIslandCells, &cells))
-            return r;
+        int complete, cells, moat;
+        island_metrics(g, cfg->islandWindow, cfg->islandStep,
+                       &complete, &cells, &moat);
+        if (!complete)
+            return r;                           /* land bridge to a mainland */
+        if (cfg->minIslandCells > 0 && cells < cfg->minIslandCells)
+            return r;                           /* just a rock */
+        /* moat == -1 means no other land in the window (maximally isolated). */
+        if (cfg->minMoat > 0 && moat >= 0 && moat < cfg->minMoat)
+            return r;                           /* another landmass too close */
         r.islandCells = cells;
+        r.moatBlocks = moat;
     }
 
     /* 6. Stronghold containment (continent mode). The nearest of the first-ring

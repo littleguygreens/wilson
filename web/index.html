@@ -137,6 +137,11 @@
       <div class="glabel"><span>Isolation</span></div>
       <label class="sw"><input type="checkbox" id="enclosed" checked> Entirely surrounded by ocean</label>
       <div class="hint">Flood-fills the spawn island and rejects any land bridge to a mainland (no peninsulas). Exact, but a little slower.</div>
+      <div id="moatWrap" style="margin-top:12px">
+        <label class="fl">Min distance to mainland: <b id="moatVal">any</b></label>
+        <input id="moat" type="range" min="0" max="1600" step="100" value="0">
+        <div class="hint">Shortest open-sea gap to the nearest other land. Higher is more isolated — and rarer.</div>
+      </div>
     </div>
 
     <div class="group">
@@ -199,6 +204,8 @@
     bindToggle('caveMode', v => state.caveAll = v);
     $('stronghold').onchange = () => $('shWrap').classList.toggle('hidden', !$('stronghold').checked);
     $('shDist').oninput = () => $('shVal').textContent = $('shDist').value;
+    $('enclosed').onchange = () => $('moatWrap').classList.toggle('hidden', !$('enclosed').checked);
+    $('moat').oninput = () => $('moatVal').textContent = ($('moat').value === '0') ? 'any' : fmt($('moat').value) + ' blocks';
   }
 
   function updateSizeHint() {
@@ -258,6 +265,7 @@
     });
     if ($('stronghold').checked) { p.set('stronghold', '1'); p.set('shDist', $('shDist').value); }
     if (!$('enclosed').checked) p.set('enclosed', '0');
+    else if ($('moat').value !== '0') p.set('moat', $('moat').value);
 
     $('results').innerHTML = '';
     $('empty').classList.add('hidden');
@@ -292,6 +300,7 @@
     const meta = document.createElement('div'); meta.className = 'meta';
     let t = `spawn ${m.spawnX}, ${m.spawnZ}`;
     if (m.islandBlocks > 0) t += `  ·  island ≈ ${fmt(Math.round(2 * Math.sqrt(m.islandBlocks / Math.PI)))} blocks wide`;
+    if (m.enclosed) t += (m.moat < 0) ? `  ·  open ocean (no land nearby)` : `  ·  ${fmt(m.moat)} blocks to mainland`;
     if (m.caves > 0) t += `  ·  caves ${m.caves}`;
     if (m.hasStronghold) t += `  ·  stronghold ${m.strongholdDist} blocks`;
     meta.textContent = t;

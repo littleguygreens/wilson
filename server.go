@@ -19,9 +19,10 @@ import (
 var indexHTML []byte
 
 const (
-	maxWorkers    = 64
-	maxSurface    = 3 // how many island biomes a search may request
-	defaultMinCav = 3
+	maxWorkers      = 64
+	maxSurface      = 3 // how many island biomes a search may request
+	defaultMinCav   = 3
+	maxIslandWindow = 6000 // cap on the flood-fill half-window (blocks)
 )
 
 // sizePreset maps an island-size choice to search geometry and map zoom. Bigger
@@ -190,6 +191,20 @@ func configFromQuery(r *http.Request) Config {
 
 	// Full-enclosure flood fill is on by default; enclosed=0 turns it off.
 	cfg.RequireEnclosed = q.Get("enclosed") != "0"
+	cfg.MinMoat = queryInt(r, "moat", 0)
+	if cfg.MinMoat < 0 {
+		cfg.MinMoat = 0
+	}
+	// Grow the flood-fill window so the requested moat actually fits inside it,
+	// capped so the grid can't blow up.
+	if cfg.RequireEnclosed && cfg.MinMoat > 0 {
+		if needed := cfg.IslandRadius + cfg.MinMoat + 4*cfg.IslandStep; needed > cfg.IslandWindow {
+			cfg.IslandWindow = needed
+		}
+		if cfg.IslandWindow > maxIslandWindow {
+			cfg.IslandWindow = maxIslandWindow
+		}
+	}
 	return cfg
 }
 
@@ -205,6 +220,8 @@ type matchDTO struct {
 	StrongholdZ    int   `json:"strongholdZ"`
 	StrongholdDist int   `json:"strongholdDist"`
 	IslandBlocks   int64 `json:"islandBlocks"`
+	Enclosed       bool  `json:"enclosed"`
+	Moat           int   `json:"moat"` // sea gap to nearest other land; -1 = open
 }
 
 // scanHandler streams scan results as Server-Sent Events, tied to the request
@@ -272,6 +289,8 @@ func scanHandler(w http.ResponseWriter, r *http.Request) {
 			StrongholdZ:    h.strongholdZ,
 			StrongholdDist: dist,
 			IslandBlocks:   int64(h.islandCells) * int64(cfg.IslandStep) * int64(cfg.IslandStep),
+			Enclosed:       cfg.RequireEnclosed,
+			Moat:           h.moatBlocks,
 		})
 		return found < n
 	})

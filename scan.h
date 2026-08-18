@@ -54,6 +54,11 @@ typedef struct {
     int islandWindow;
     int islandStep;
     int minIslandCells;
+
+    /* Minimum ocean moat: the shortest sea gap from the spawn island to any
+     * other landmass must be at least this many blocks. 0 just requires
+     * enclosure (any gap). Larger values dial in more isolation (rarer). */
+    int minMoat;
 } ScanConfig;
 
 /* What a single seed check gives back. */
@@ -66,6 +71,7 @@ typedef struct {
     int strongholdX;    /* nearest qualifying stronghold, if any */
     int strongholdZ;
     int islandCells;    /* land cells in the spawn-connected component */
+    int moatBlocks;     /* sea gap to nearest other land; -1 = none in window */
 } ScanResult;
 
 /* The generator is handed back as an opaque pointer (void*). Go stores it and

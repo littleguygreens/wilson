@@ -43,6 +43,7 @@ type hit struct {
 	strongholdX   int
 	strongholdZ   int
 	islandCells   int
+	moatBlocks    int
 }
 
 // Config is the pure-Go description of a search. It is translated to a C
@@ -73,6 +74,7 @@ type Config struct {
 	IslandWindow    int
 	IslandStep      int
 	MinIslandCells  int
+	MinMoat         int
 
 	MapStep int // rendering zoom; not part of the C filter
 }
@@ -177,6 +179,7 @@ func toCConfig(cfg Config) C.ScanConfig {
 	c.islandWindow = C.int(cfg.IslandWindow)
 	c.islandStep = C.int(cfg.IslandStep)
 	c.minIslandCells = C.int(cfg.MinIslandCells)
+	c.minMoat = C.int(cfg.MinMoat)
 	return c
 }
 
@@ -324,6 +327,7 @@ func search(ctx context.Context, hits chan<- hit, tested *int64, cCfg *C.ScanCon
 			strongholdX:   int(res.strongholdX),
 			strongholdZ:   int(res.strongholdZ),
 			islandCells:   int(res.islandCells),
+			moatBlocks:    int(res.moatBlocks),
 		}:
 		case <-ctx.Done():
 			return

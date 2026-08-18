@@ -38,7 +38,10 @@ parameters:
   rejects it if that blob reaches the edge of the search window, i.e. it is
   joined to a mainland by a land bridge. This catches peninsulas of any width
   that an ocean-ring percentage cannot. Separate, unconnected landmasses
-  elsewhere in the view are still fine.
+  elsewhere in the view are still fine. A **distance-to-mainland** slider sets
+  the minimum open-sea gap (moat) between the spawn island and the nearest
+  other land; higher values are more isolated and rarer. The search window
+  grows to fit the requested moat.
 - **Stronghold** — optionally require the nearest first-ring stronghold to sit
   on the island's land within a chosen distance. Realistic only at Huge/XXL,
   since strongholds never generate within ~1,280 blocks of spawn.
