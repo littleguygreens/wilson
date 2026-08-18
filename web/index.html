@@ -140,7 +140,7 @@
       <div id="moatWrap" style="margin-top:12px">
         <label class="fl">Min distance to mainland: <b id="moatVal">any</b></label>
         <input id="moat" type="range" min="0" max="1600" step="100" value="0">
-        <div class="hint">Shortest open-sea gap to the nearest other land. Higher is more isolated — and rarer.</div>
+        <div class="hint">Shortest open-sea gap to the nearest mainland. Small nearby islands don't count. Higher is more isolated — and rarer.</div>
       </div>
     </div>
 
@@ -300,7 +300,7 @@
     const meta = document.createElement('div'); meta.className = 'meta';
     let t = `spawn ${m.spawnX}, ${m.spawnZ}`;
     if (m.islandBlocks > 0) t += `  ·  island ≈ ${fmt(Math.round(2 * Math.sqrt(m.islandBlocks / Math.PI)))} blocks wide`;
-    if (m.enclosed) t += (m.moat < 0) ? `  ·  open ocean (no land nearby)` : `  ·  ${fmt(m.moat)} blocks to mainland`;
+    if (m.enclosed) t += (m.moat < 0) ? `  ·  no mainland nearby` : `  ·  ${fmt(m.moat)} blocks to mainland`;
     if (m.caves > 0) t += `  ·  caves ${m.caves}`;
     if (m.hasStronghold) t += `  ·  stronghold ${m.strongholdDist} blocks`;
     meta.textContent = t;

@@ -73,8 +73,41 @@ static int ocean_ring(Generator *g, const ScanConfig *cfg, int radius, int sampl
  *
  * Two passes over the same grid: an 8-connected flood fill from spawn marks the
  * island (catching land bridges of any width -- the fill follows a bridge to
- * the edge), then a multi-source BFS outward through ocean finds the nearest
- * cell of a different landmass. */
+ * the edge), then a multi-source BFS outward through ocean looks for the nearest
+ * MAINLAND. Other land the BFS meets is classified: if that blob runs off the
+ * window edge (continental) or is far larger than the spawn island it counts as
+ * mainland and sets the moat; a smaller, self-contained blob is a peer islet and
+ * is skipped, so nearby small islands do not shrink the moat. */
+
+/* Flood-fills one land component (value 1) starting at `start`, marking it
+ * `mark`. Returns its cell count; sets *touchEdge if it reaches the grid edge. */
+static int classify_component(unsigned char *land, int n, int start, int mark,
+                              int *touchEdge, int *stack)
+{
+    int top = 0, area = 0;
+    *touchEdge = 0;
+    land[start] = (unsigned char)mark;
+    stack[top++] = start;
+    while (top > 0) {
+        int idx = stack[--top], i = idx % n, j = idx / n;
+        area++;
+        if (i == 0 || j == 0 || i == n - 1 || j == n - 1) *touchEdge = 1;
+        for (int dj = -1; dj <= 1; dj++)
+            for (int di = -1; di <= 1; di++) {
+                if (!di && !dj) continue;
+                int ni = i + di, nj = j + dj;
+                if (ni < 0 || nj < 0 || ni >= n || nj >= n) continue;
+                int k = nj * n + ni;
+                if (land[k] == 1) { land[k] = (unsigned char)mark; stack[top++] = k; }
+            }
+    }
+    return area;
+}
+
+/* A neighbouring landmass counts as mainland if it extends past the window or is
+ * more than this many times the spawn island's area. */
+#define MAINLAND_FACTOR 4
+
 static void island_metrics(Generator *g, int window, int step,
                            int *complete, int *cells, int *moat)
 {
@@ -87,10 +120,14 @@ static void island_metrics(Generator *g, int window, int step,
     int n = 2 * (window / step) + 1;    /* odd, so the centre cell is spawn */
     int c = n / 2;
 
-    unsigned char *land = malloc((size_t)n * n);   /* 0 ocean, 1 land, 2 island */
+    /* land: 0 ocean, 1 land, 2 spawn island, 3 classified other land */
+    unsigned char *land = malloc((size_t)n * n);
     int *queue = malloc(sizeof(int) * (size_t)n * n);
     int *dist = malloc(sizeof(int) * (size_t)n * n);
-    if (!land || !queue || !dist) { free(land); free(queue); free(dist); *complete = 0; return; }
+    int *cstk = malloc(sizeof(int) * (size_t)n * n);
+    if (!land || !queue || !dist || !cstk) {
+        free(land); free(queue); free(dist); free(cstk); *complete = 0; return;
+    }
 
     for (int j = 0; j < n; j++)
         for (int i = 0; i < n; i++) {
@@ -100,30 +137,14 @@ static void island_metrics(Generator *g, int window, int step,
         }
 
     /* Pass 1: flood-fill the spawn island (8-connected). */
-    int area = 0, top = 0;
-    if (land[c * n + c]) {
-        land[c * n + c] = 2;
-        queue[top++] = c * n + c;
-    }
-    while (top > 0) {
-        int idx = queue[--top];
-        int i = idx % n, j = idx / n;
-        area++;
-        if (i == 0 || j == 0 || i == n - 1 || j == n - 1)
-            *complete = 0;             /* blob reaches the edge -> a bridge out */
-        for (int dj = -1; dj <= 1; dj++)
-            for (int di = -1; di <= 1; di++) {
-                if (!di && !dj) continue;
-                int ni = i + di, nj = j + dj;
-                if (ni < 0 || nj < 0 || ni >= n || nj >= n) continue;
-                int k = nj * n + ni;
-                if (land[k] == 1) { land[k] = 2; queue[top++] = k; }
-            }
-    }
+    int spawnEdge = 0;
+    int area = (land[c * n + c]) ? classify_component(land, n, c * n + c, 2, &spawnEdge, queue) : 0;
+    if (spawnEdge) *complete = 0;      /* blob reaches the edge -> a bridge out */
     *cells = area;
 
-    /* Pass 2: BFS out through ocean from the island; the first other-land cell
-     * we touch gives the shortest gap. Seed with ocean cells next to the island. */
+    /* Pass 2: BFS out through ocean; classify each landmass met, keep the
+     * nearest one that qualifies as mainland. Seed with ocean cells by the
+     * island. */
     for (int i = 0; i < n * n; i++) dist[i] = -1;
     int head = 0, tail = 0;
     for (int j = 0; j < n; j++)
@@ -140,21 +161,32 @@ static void island_metrics(Generator *g, int window, int step,
     while (head < tail && *moat < 0) {
         int idx = queue[head++];
         int i = idx % n, j = idx / n, d = dist[idx];
-        for (int dj = -1; dj <= 1; dj++)
+        for (int dj = -1; dj <= 1; dj++) {
             for (int di = -1; di <= 1; di++) {
                 if (!di && !dj) continue;
                 int ni = i + di, nj = j + dj;
                 if (ni < 0 || nj < 0 || ni >= n || nj >= n) continue;
                 int k = nj * n + ni;
-                if (land[k] == 1) { *moat = d * step; break; }   /* other land */
-                if (land[k] == 0 && dist[k] < 0) { dist[k] = d + 1; queue[tail++] = k; }
+                if (land[k] == 1) {                      /* unclassified landmass */
+                    int te, a = classify_component(land, n, k, 3, &te, cstk);
+                    if (te || (area > 0 && a > MAINLAND_FACTOR * area)) {
+                        *moat = d * step;                /* mainland -> the moat */
+                        break;
+                    }
+                    /* else a peer islet: marked 3, ignored, keep searching */
+                } else if (land[k] == 0 && dist[k] < 0) {
+                    dist[k] = d + 1;
+                    queue[tail++] = k;
+                }
             }
-        if (*moat >= 0) break;
+            if (*moat >= 0) break;
+        }
     }
 
     free(land);
     free(queue);
     free(dist);
+    free(cstk);
 }
 
 /* ---- lifecycle ------------------------------------------------------- */
