@@ -41,8 +41,9 @@ parameters:
   outpost, woodland mansion, ocean monument, ruined portal, ancient city, trial
   chamber) to have a viable instance within the island. Stacking several is rare.
 - **Show structures on maps** — independent per-type toggles overlay colour-coded
-  markers on every result map (hover a marker for its name and coordinates).
-- **Isolation** (on by default) — flood-fills the land connected to spawn and
+  markers on every result map (hover a marker for its name and coordinates), with
+  a legend under each map counting how many of each type are in view.
+- **Isolation** (always on) — flood-fills the land connected to spawn and
   rejects it if that blob reaches the edge of the search window, i.e. it is
   joined to a mainland by a land bridge. This catches peninsulas of any width
   that an ocean-ring percentage cannot. Separate, unconnected landmasses

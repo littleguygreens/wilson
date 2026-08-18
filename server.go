@@ -249,8 +249,8 @@ func configFromQuery(r *http.Request) Config {
 		cfg.StructRadius = cfg.IslandRadius
 	}
 
-	// Full-enclosure flood fill is on by default; enclosed=0 turns it off.
-	cfg.RequireEnclosed = q.Get("enclosed") != "0"
+	// Full-enclosure flood fill is always on: results are never peninsulas.
+	cfg.RequireEnclosed = true
 	cfg.MinMoat = queryInt(r, "moat", 0)
 	if cfg.MinMoat < 0 {
 		cfg.MinMoat = 0

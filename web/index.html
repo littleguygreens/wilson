@@ -95,6 +95,10 @@
   .mapwrap { position: relative; margin-top: 10px; line-height: 0; }
   .mapwrap img { margin-top: 0; }
   .smark { position: absolute; width: 11px; height: 11px; border-radius: 50%; border: 1.5px solid #0b0e12; transform: translate(-50%, -50%); box-shadow: 0 0 0 1px rgba(255,255,255,.45); cursor: help; }
+  .maplegend { display: none; flex-wrap: wrap; gap: 5px 12px; margin-top: 9px; font-size: 12px; color: var(--muted); }
+  .maplegend span { display: inline-flex; align-items: center; }
+  .maplegend b { color: var(--text); margin-left: 5px; font-variant-numeric: tabular-nums; }
+  .maplegend .dotc { width: 9px; height: 9px; border-radius: 50%; display: inline-block; margin-right: 5px; border: 1px solid rgba(255,255,255,.4); }
 </style>
 </head>
 <body>
@@ -163,8 +167,7 @@
 
     <div class="group">
       <div class="glabel"><span>Isolation</span></div>
-      <label class="sw"><input type="checkbox" id="enclosed" checked> Entirely surrounded by ocean</label>
-      <div class="hint">Flood-fills the spawn island and rejects any land bridge to a mainland (no peninsulas). Exact, but a little slower.</div>
+      <div class="hint">Every result is fully enclosed by ocean — the spawn island never connects to a mainland by a land bridge.</div>
       <div id="moatWrap" style="margin-top:12px">
         <label class="fl">Min distance to mainland: <b id="moatVal">any</b></label>
         <input id="moat" type="range" min="0" max="1600" step="100" value="0">
@@ -237,7 +240,6 @@
     bindToggle('caveMode', v => state.caveAll = v);
     $('stronghold').onchange = () => $('shWrap').classList.toggle('hidden', !$('stronghold').checked);
     $('shDist').oninput = () => $('shVal').textContent = $('shDist').value;
-    $('enclosed').onchange = () => $('moatWrap').classList.toggle('hidden', !$('enclosed').checked);
     $('moat').oninput = () => $('moatVal').textContent = ($('moat').value === '0') ? 'any' : fmt($('moat').value) + ' blocks';
     renderPresets();
   }
@@ -303,7 +305,7 @@
       ocean: selected('ocean'),
       cave: selected('cave'), caveAll: state.caveAll,
       minCave: parseInt($('minCave').value, 10) || 3,
-      enclosed: $('enclosed').checked ? 1 : 0,
+      enclosed: 1,
       moat: parseInt($('moat').value, 10) || 0,
       stronghold: $('stronghold').checked ? 1 : 0,
       shDist: parseInt($('shDist').value, 10) || 1700,
@@ -318,7 +320,6 @@
     setChips('ocean', p.ocean || []);
     setChips('cave', p.cave || []); state.caveAll = p.caveAll ? 1 : 0; markToggle('caveMode', state.caveAll);
     $('minCave').value = p.minCave || 3;
-    $('enclosed').checked = p.enclosed !== 0; $('moatWrap').classList.toggle('hidden', !$('enclosed').checked);
     $('moat').value = p.moat || 0; $('moat').oninput();
     $('stronghold').checked = !!p.stronghold; $('shWrap').classList.toggle('hidden', !$('stronghold').checked);
     $('shDist').value = p.shDist || 1700; $('shDist').oninput();
@@ -395,8 +396,7 @@
       workers: (Number.isFinite(wRaw) && wRaw > 0) ? wRaw : 0,
     });
     if ($('stronghold').checked) { p.set('stronghold', '1'); p.set('shDist', $('shDist').value); }
-    if (!$('enclosed').checked) p.set('enclosed', '0');
-    else if ($('moat').value !== '0') p.set('moat', $('moat').value);
+    if ($('moat').value !== '0') p.set('moat', $('moat').value);
     const reqS = selected('reqStructs');
     if (reqS.length) p.set('structures', reqS.join(','));
 
@@ -447,7 +447,10 @@
     img.addEventListener('pointerleave', hideTip);
     wrap.appendChild(img);
 
-    card.append(top, meta, wrap);
+    const legend = document.createElement('div'); legend.className = 'maplegend';
+    wrap._legend = legend;
+
+    card.append(top, meta, wrap, legend);
     $('results').prepend(card);
     if (state.showStructs.size) ensureStructs(wrap, () => renderMarkers(wrap));
   }
@@ -503,11 +506,36 @@
         wrap.appendChild(m);
       });
     });
+    updateLegend(wrap);
+  }
+
+  // Per-map legend: colour, label and count for each enabled structure type
+  // that appears within the map view.
+  function updateLegend(wrap) {
+    const lg = wrap._legend;
+    if (!lg) return;
+    lg.innerHTML = '';
+    let any = false;
+    if (wrap._structs) {
+      state.structs.forEach((st) => {
+        if (!state.showStructs.has(st.key)) return;
+        any = true;
+        const n = (wrap._structs[st.key] || []).length;
+        const s = document.createElement('span');
+        s.innerHTML = `<span class="dotc" style="background:${st.color}"></span>${st.label}<b>${n}</b>`;
+        lg.appendChild(s);
+      });
+    }
+    lg.style.display = any ? 'flex' : 'none';
   }
 
   function refreshAllOverlays() {
     document.querySelectorAll('#results .mapwrap').forEach((wrap) => {
-      if (state.showStructs.size === 0) { wrap.querySelectorAll('.smark').forEach((e) => e.remove()); return; }
+      if (state.showStructs.size === 0) {
+        wrap.querySelectorAll('.smark').forEach((e) => e.remove());
+        if (wrap._legend) wrap._legend.style.display = 'none';
+        return;
+      }
       ensureStructs(wrap, () => renderMarkers(wrap));
     });
   }
