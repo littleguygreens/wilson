@@ -18,10 +18,12 @@ import (
 	"image/png"
 	"io"
 	"log"
+	"math"
 	"math/rand/v2"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"unsafe"
@@ -196,7 +198,15 @@ func main() {
 	workers := flag.Int("workers", runtime.NumCPU(), "concurrent workers")
 	serve := flag.Bool("serve", false, "run the mobile web UI instead of a one-off CLI scan")
 	addr := flag.String("addr", ":8080", "address for the web UI (used with -serve)")
+	check := flag.String("check", "", "diagnose a single seed against -size, then exit")
+	size := flag.String("size", "L", "size preset for -check (S/M/L/XL/XXL)")
+	moat := flag.Int("moat", 0, "min mainland moat (blocks) for -check")
 	flag.Parse()
+
+	if *check != "" {
+		runCheck(*check, *size, *moat)
+		return
+	}
 
 	if *serve {
 		log.Fatal(runServer(*addr))
@@ -249,6 +259,46 @@ func defaultConfig() Config {
 	cfg.MinCave = 3
 	cfg.RequireEnclosed = true
 	return cfg
+}
+
+// runCheck diagnoses one seed against a size preset (enclosure on) and prints
+// whether it would match. Handy for confirming a build behaves as expected:
+//
+//	./wilson -check <seed> -size L [-moat 300]
+func runCheck(seedStr, size string, moat int) {
+	seed, err := strconv.ParseInt(seedStr, 10, 64)
+	if err != nil {
+		log.Fatalf("bad seed %q: %v", seedStr, err)
+	}
+	cfg := geometryForSize(size)
+	cfg.RequireEnclosed = true
+	cfg.MinMoat = moat
+	if moat > 0 { // mirror the server's window growth
+		if needed := cfg.IslandRadius + moat + 4*cfg.IslandStep; needed > cfg.IslandWindow {
+			cfg.IslandWindow = needed
+		}
+		if cfg.IslandWindow > maxIslandWindow {
+			cfg.IslandWindow = maxIslandWindow
+		}
+	}
+	cc := toCConfig(cfg)
+	s := C.scanner_new()
+	defer C.scanner_free(s)
+	r := C.scanner_check(s, C.uint64_t(uint64(seed)), &cc)
+
+	fmt.Printf("seed %d  size %s  enclosed  moat>=%d\n", seed, size, moat)
+	if r.match == 0 {
+		fmt.Println("  match: NO  — rejected (not an enclosed island under this size)")
+		return
+	}
+	step := cfg.IslandStep
+	width := int(math.Round(2 * math.Sqrt(float64(int(r.islandCells)*step*step)/math.Pi)))
+	moatStr := "no mainland within window"
+	if int(r.moatBlocks) >= 0 {
+		moatStr = fmt.Sprintf("%d blocks to mainland", int(r.moatBlocks))
+	}
+	fmt.Printf("  match: YES  spawn %d,%d  island ~%d blocks wide  %s\n",
+		int(r.spawnX), int(r.spawnZ), width, moatStr)
 }
 
 // runScan spins up the worker pool and calls onHit for every matching seed, in
