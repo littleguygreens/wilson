@@ -20,7 +20,7 @@ var indexHTML []byte
 
 const (
 	maxWorkers      = 64
-	maxSurface      = 3 // how many island biomes a search may request
+	maxSurface      = 6 // how many island biomes a search may request
 	defaultMinCav   = 3
 	maxIslandWindow = 6000 // cap on the flood-fill half-window (blocks)
 )

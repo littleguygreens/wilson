@@ -28,8 +28,10 @@ parameters:
 - **Island size** S → XXL. Bigger sizes push the surrounding ocean farther
   out and zoom the map so the whole landmass fits. **XXL ("continent")** is a
   large isolated landmass rather than a small island.
-- **Island biomes** — up to 3 desired surface biomes, with an **All / Any**
+- **Island biomes** — up to 6 desired surface biomes, with an **All / Any**
   toggle (must contain every one, or at least one).
+- **Presets** — one built-in "Mountain Isle" search, plus up to 3 of your own
+  saved in the browser (localStorage). Tap to load a full configuration.
 - **Allowed ocean types** — which ocean biomes count as the isolating sea
   (none selected = any ocean).
 - **Cave biomes** — desired underground biomes, with All / Any and a minimum

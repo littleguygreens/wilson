@@ -38,6 +38,10 @@
   }
   .chip.on { background: var(--chip-on); border-color: var(--accent); }
   .chip.disabled { opacity: .4; }
+  .chip.preset { border-color: var(--accent); display: inline-flex; align-items: center; }
+  .chip.preset .del { margin-left: 9px; color: var(--muted); font-weight: 700; padding: 0 2px; }
+  .chip.preset .del:hover { color: #ff6b6b; }
+  .chip.save { border-style: dashed; color: var(--muted); }
 
   /* segmented control (size) */
   .seg { display: flex; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
@@ -95,6 +99,12 @@
   </header>
 
   <div class="panel">
+    <div class="group">
+      <div class="glabel"><span>Presets</span></div>
+      <div id="presets" class="chips"></div>
+      <div class="hint">Tap to load. Save the current settings as your own — up to 3.</div>
+    </div>
+
     <div class="group">
       <div class="glabel"><span>Island size</span></div>
       <div id="sizes" class="seg"></div>
@@ -187,6 +197,7 @@
 
   function setup(d) {
     state.sizes = d.sizes;
+    state.maxSurface = d.maxSurface;
     // size segmented control
     const seg = $('sizes'); seg.innerHTML = '';
     d.sizes.forEach(s => {
@@ -200,13 +211,102 @@
     buildChips('surface', d.surface, d.maxSurface);
     buildChips('ocean', d.ocean, 0);
     buildChips('cave', d.cave, 0);
+    $('surfCount').textContent = '(0/' + d.maxSurface + ')';
     bindToggle('surfaceMode', v => state.surfaceAll = v);
     bindToggle('caveMode', v => state.caveAll = v);
     $('stronghold').onchange = () => $('shWrap').classList.toggle('hidden', !$('stronghold').checked);
     $('shDist').oninput = () => $('shVal').textContent = $('shDist').value;
     $('enclosed').onchange = () => $('moatWrap').classList.toggle('hidden', !$('enclosed').checked);
     $('moat').oninput = () => $('moatVal').textContent = ($('moat').value === '0') ? 'any' : fmt($('moat').value) + ' blocks';
+    renderPresets();
   }
+
+  // ---- presets (saved in the browser) -------------------------------------
+  const BUILTIN_PRESETS = [{
+    name: '⛰ Mountain Isle', builtin: true,
+    cfg: {
+      size: 'L',
+      surface: ['jagged_peaks', 'frozen_peaks', 'stony_peaks', 'snowy_slopes', 'windswept_hills'],
+      surfaceAll: 0, ocean: [], cave: ['lush_caves'], caveAll: 0, minCave: 3,
+      enclosed: 1, moat: 300, stronghold: 0, shDist: 1700, n: 5, workers: ''
+    }
+  }];
+  const PRESET_KEY = 'seedscan.presets';
+  const MAX_PRESETS = 3;
+
+  function loadUserPresets() { try { return JSON.parse(localStorage.getItem(PRESET_KEY) || '[]'); } catch (_) { return []; } }
+  function saveUserPresets(a) { try { localStorage.setItem(PRESET_KEY, JSON.stringify(a)); } catch (_) {} }
+
+  function renderPresets() {
+    const box = $('presets'); box.innerHTML = '';
+    const add = (label, onLoad, onDel) => {
+      const c = document.createElement('span'); c.className = 'chip preset';
+      const t = document.createElement('span'); t.textContent = label; t.onclick = onLoad; c.appendChild(t);
+      if (onDel) { const d = document.createElement('span'); d.className = 'del'; d.textContent = '×'; d.onclick = (e) => { e.stopPropagation(); onDel(); }; c.appendChild(d); }
+      box.appendChild(c);
+    };
+    BUILTIN_PRESETS.forEach(p => add(p.name, () => applyPreset(p.cfg)));
+    const users = loadUserPresets();
+    users.forEach((p, i) => add(p.name, () => applyPreset(p.cfg), () => { users.splice(i, 1); saveUserPresets(users); renderPresets(); }));
+    if (users.length < MAX_PRESETS) {
+      const c = document.createElement('span'); c.className = 'chip save';
+      c.textContent = '+ Save current'; c.onclick = savePreset; box.appendChild(c);
+    }
+  }
+
+  function savePreset() {
+    const users = loadUserPresets();
+    if (users.length >= MAX_PRESETS) { alert('You have 3 presets. Delete one first.'); return; }
+    const name = (prompt('Name this preset:', 'My search') || '').trim();
+    if (!name) return;
+    const existing = users.findIndex(p => p.name === name);
+    const entry = { name, cfg: captureConfig() };
+    if (existing >= 0) users[existing] = entry; else users.push(entry);
+    saveUserPresets(users); renderPresets();
+  }
+
+  function captureConfig() {
+    return {
+      size: state.size,
+      surface: selected('surface'), surfaceAll: state.surfaceAll,
+      ocean: selected('ocean'),
+      cave: selected('cave'), caveAll: state.caveAll,
+      minCave: parseInt($('minCave').value, 10) || 3,
+      enclosed: $('enclosed').checked ? 1 : 0,
+      moat: parseInt($('moat').value, 10) || 0,
+      stronghold: $('stronghold').checked ? 1 : 0,
+      shDist: parseInt($('shDist').value, 10) || 1700,
+      n: parseInt($('n').value, 10) || 5,
+      workers: $('workers').value || ''
+    };
+  }
+
+  function applyPreset(p) {
+    setSize(p.size || 'M');
+    setChips('surface', p.surface || []); state.surfaceAll = p.surfaceAll ? 1 : 0; markToggle('surfaceMode', state.surfaceAll);
+    setChips('ocean', p.ocean || []);
+    setChips('cave', p.cave || []); state.caveAll = p.caveAll ? 1 : 0; markToggle('caveMode', state.caveAll);
+    $('minCave').value = p.minCave || 3;
+    $('enclosed').checked = p.enclosed !== 0; $('moatWrap').classList.toggle('hidden', !$('enclosed').checked);
+    $('moat').value = p.moat || 0; $('moat').oninput();
+    $('stronghold').checked = !!p.stronghold; $('shWrap').classList.toggle('hidden', !$('stronghold').checked);
+    $('shDist').value = p.shDist || 1700; $('shDist').oninput();
+    $('n').value = p.n || 5;
+    $('workers').value = p.workers || '';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function setSize(key) {
+    state.size = key;
+    [...$('sizes').children].forEach(c => c.classList.toggle('on', c.dataset.key === key));
+    updateSizeHint();
+  }
+  function setChips(cat, keys) {
+    const set = new Set(keys);
+    [...$(cat).children].forEach(c => c.classList.toggle('on', set.has(c.dataset.key)));
+    if (cat === 'surface') { $('surfCount').textContent = '(' + selected('surface').length + '/' + state.maxSurface + ')'; refreshSurfaceDisable(state.maxSurface); }
+  }
+  function markToggle(id, v) { [...$(id).children].forEach(b => b.classList.toggle('on', parseInt(b.dataset.v, 10) === v)); }
 
   function updateSizeHint() {
     const s = state.sizes.find(x => x.key === state.size);
