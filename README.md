@@ -45,10 +45,18 @@ still shows live progress.
 
 Everything worth adjusting lives at the top of `scan.c`:
 
-    RING_RADIUS     how far out the ocean check looks
+    RING_RADIUS     how far out the inner ocean check looks
     RING_MIN_OCEAN  how much of that circle must be ocean (strictness)
+    OUTER_RADIUS    the wider isolation ring (keeps only lone islands)
+    OUTER_MIN_OCEAN how much of the wider circle must be ocean
     ISLAND_RADIUS   how big an area counts as "the island"
     MIN_LUSH        how much lush caves biome is required underground
+
+The two ocean rings are the main strictness dial. The inner ring just proves
+you spawn on an island; the outer ring (600 blocks) is what makes that island
+genuinely isolated rather than tucked against a nearby mainland. Raising
+OUTER_MIN_OCEAN or OUTER_RADIUS gives cleaner, lonelier islands but makes
+matches much rarer -- see the measured trade-offs noted next to the defines.
 
 ## Known limits
 

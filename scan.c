@@ -16,6 +16,20 @@
 #define RING_SAMPLES    32        /* points around that circle */
 #define RING_MIN_OCEAN  30        /* how many must be ocean (30 of 32) */
 
+/* Second, wider ocean ring. The inner ring only proves sea out to 250 blocks,
+ * which lets a "match" sit just off a mainland. This outer ring pushes the
+ * guaranteed ocean out to OUTER_RADIUS, so hits are genuinely isolated islands.
+ * Measured trade-off (fraction of islands that also clear this ring, and the
+ * resulting match rate vs the ~1-in-2.3M inner-only baseline):
+ *     r=600, >=38/48 (80%)  -> ~33%   ~1 in 7.0M   (the default below)
+ *     r=600, >=43/48 (90%)  -> ~16%   ~1 in 14M    (tighter, cleaner ring)
+ *     r=700, >=43/48 (90%)  -> ~8%    ~1 in 28M    (very isolated, slow)
+ * Raise OUTER_MIN_OCEAN or OUTER_RADIUS for stricter isolation at the cost of
+ * rarer hits. */
+#define OUTER_RADIUS    600       /* wider ocean ring, for true isolation */
+#define OUTER_SAMPLES   48        /* points around the wider circle */
+#define OUTER_MIN_OCEAN 38        /* how many must be ocean (~80% of 48) */
+
 #define ISLAND_RADIUS   200       /* area we consider "the island" */
 #define GRID_STEP       16        /* sample spacing inside the island */
 
@@ -108,6 +122,20 @@ ScanResult scanner_check(void *s, uint64_t seed)
 
     /* 2. Land in the middle -- otherwise it is just open sea. */
     if (is_ocean(biome_at_block(g, 0, SURFACE_Y, 0)))
+        return r;
+
+    /* 2b. Wider ocean ring. Rejects a small island tucked against a mainland,
+     *     keeping only genuinely isolated ones. Still far cheaper per rejection
+     *     than the island footprint scan below, so it runs before it. */
+    int outerOcean = 0;
+    for (int i = 0; i < OUTER_SAMPLES; i++) {
+        double a = 2.0 * M_PI * i / OUTER_SAMPLES;
+        int x = (int)(cos(a) * OUTER_RADIUS);
+        int z = (int)(sin(a) * OUTER_RADIUS);
+        if (is_ocean(biome_at_block(g, x, SURFACE_Y, z)))
+            outerOcean++;
+    }
+    if (outerOcean < OUTER_MIN_OCEAN)
         return r;
 
     /* 3 & 4. One pass over the island footprint, collecting both the surface
