@@ -34,6 +34,11 @@ parameters:
   (none selected = any ocean).
 - **Cave biomes** — desired underground biomes, with All / Any and a minimum
   sample count.
+- **Isolation** (on by default) — flood-fills the land connected to spawn and
+  rejects it if that blob reaches the edge of the search window, i.e. it is
+  joined to a mainland by a land bridge. This catches peninsulas of any width
+  that an ocean-ring percentage cannot. Separate, unconnected landmasses
+  elsewhere in the view are still fine.
 - **Stronghold** — optionally require the nearest first-ring stronghold to sit
   on the island's land within a chosen distance. Realistic only at Huge/XXL,
   since strongholds never generate within ~1,280 blocks of spawn.
@@ -75,6 +80,9 @@ point, and finally the stronghold check. The search is described by a
   there, so results are candidates, not guarantees. Check finalists in game.
 - Surface "mountains" are inferred from peak-type biomes, not real terrain
   height.
-- Isolation is verified on ocean rings at fixed radii, so distant land can
-  still appear at the edges of the map (especially for continents).
+- The isolation flood fill only sees a window around spawn (its half-size
+  scales with island size). A genuinely isolated landmass larger than that
+  window is rejected, since its ocean border falls outside what we sample.
+- Separate, unconnected land can still appear elsewhere on the map; enclosure
+  only guarantees the spawn island itself has no land bridge out.
 - `MC_VERSION` in `scan.c` must match an enum in cubiomes' `generator.h`.

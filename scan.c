@@ -66,6 +66,67 @@ static int ocean_ring(Generator *g, const ScanConfig *cfg, int radius, int sampl
     return hits;
 }
 
+/* Flood-fills the land connected to spawn (the origin) across a square window
+ * and decides whether that land blob is entirely ringed by ocean. Returns 1 if
+ * enclosed, 0 otherwise; writes the blob's cell count to *cells.
+ *
+ * Unlike an ocean-ring percentage, this catches a peninsula: a land bridge of
+ * any width joins the blob to the mainland, the fill follows it to the window
+ * edge, and touching the edge means "land continues beyond what we can see" ->
+ * not enclosed. 8-connectivity is used so even a diagonal bridge is followed. */
+static int island_enclosed(Generator *g, int window, int step, int minCells,
+                           int *cells)
+{
+    *cells = 0;
+    if (window <= 0 || step <= 0)
+        return 1;                       /* check disabled */
+
+    int n = 2 * (window / step) + 1;    /* odd, so the centre cell is spawn */
+    int c = n / 2;
+
+    unsigned char *land = malloc((size_t)n * n);
+    int *stack = malloc(sizeof(int) * (size_t)n * n);
+    if (!land || !stack) { free(land); free(stack); return 0; }
+
+    for (int j = 0; j < n; j++)
+        for (int i = 0; i < n; i++) {
+            int bx = (i - c) * step;
+            int bz = (j - c) * step;
+            land[j * n + i] = is_ocean(biome_at_block(g, bx, SURFACE_Y, bz)) ? 0 : 1;
+        }
+
+    int enclosed = 1, area = 0, top = 0;
+    if (land[c * n + c]) {              /* spawn is land (it should be) */
+        land[c * n + c] = 2;
+        stack[top++] = c * n + c;
+    }
+    while (top > 0) {
+        int idx = stack[--top];
+        int i = idx % n, j = idx / n;
+        area++;
+        if (i == 0 || j == 0 || i == n - 1 || j == n - 1)
+            enclosed = 0;              /* blob reaches the edge -> a bridge out */
+        for (int dj = -1; dj <= 1; dj++)
+            for (int di = -1; di <= 1; di++) {
+                if (!di && !dj) continue;
+                int ni = i + di, nj = j + dj;
+                if (ni < 0 || nj < 0 || ni >= n || nj >= n) continue;
+                int nidx = nj * n + ni;
+                if (land[nidx] == 1) {
+                    land[nidx] = 2;
+                    stack[top++] = nidx;
+                }
+            }
+    }
+
+    free(land);
+    free(stack);
+    *cells = area;
+    if (!enclosed) return 0;
+    if (minCells > 0 && area < minCells) return 0;
+    return 1;
+}
+
 /* ---- lifecycle ------------------------------------------------------- */
 
 void *scanner_new(void)
@@ -169,6 +230,17 @@ ScanResult scanner_check(void *s, uint64_t seed, const ScanConfig *cfg)
         return r;
     r.spawnX = p.x;
     r.spawnZ = p.z;
+
+    /* 5b. Definitive isolation: flood-fill the land connected to spawn and
+     *     require it to be fully ringed by ocean, not joined to a mainland by a
+     *     land bridge the rings would miss. Expensive, so it runs late. */
+    if (cfg->requireEnclosed) {
+        int cells = 0;
+        if (!island_enclosed(g, cfg->islandWindow, cfg->islandStep,
+                             cfg->minIslandCells, &cells))
+            return r;
+        r.islandCells = cells;
+    }
 
     /* 6. Stronghold containment (continent mode). The nearest of the first-ring
      *    strongholds must sit on land within strongholdMaxDist. Most expensive

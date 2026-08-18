@@ -44,6 +44,16 @@ typedef struct {
      * within strongholdMaxDist blocks of spawn. */
     int requireStronghold;
     int strongholdMaxDist;
+
+    /* Definitive isolation: flood-fill the land connected to spawn across a
+     * window and require that blob never touches the window edge -- i.e. it is
+     * entirely ringed by ocean, not a peninsula. islandWindow is the half-size
+     * in blocks, islandStep the grid spacing, minIslandCells a floor on the
+     * blob's cell count so a lone rock does not count. */
+    int requireEnclosed;
+    int islandWindow;
+    int islandStep;
+    int minIslandCells;
 } ScanConfig;
 
 /* What a single seed check gives back. */
@@ -55,6 +65,7 @@ typedef struct {
     int hasStronghold;  /* 1 if a qualifying stronghold was found */
     int strongholdX;    /* nearest qualifying stronghold, if any */
     int strongholdZ;
+    int islandCells;    /* land cells in the spawn-connected component */
 } ScanResult;
 
 /* The generator is handed back as an opaque pointer (void*). Go stores it and

@@ -134,6 +134,12 @@
     </div>
 
     <div class="group">
+      <div class="glabel"><span>Isolation</span></div>
+      <label class="sw"><input type="checkbox" id="enclosed" checked> Entirely surrounded by ocean</label>
+      <div class="hint">Flood-fills the spawn island and rejects any land bridge to a mainland (no peninsulas). Exact, but a little slower.</div>
+    </div>
+
+    <div class="group">
       <div class="glabel"><span>Stronghold</span></div>
       <label class="sw"><input type="checkbox" id="stronghold"> First stronghold on the island</label>
       <div id="shWrap" class="hidden" style="margin-top:10px">
@@ -251,6 +257,7 @@
       workers: (Number.isFinite(wRaw) && wRaw > 0) ? wRaw : 0,
     });
     if ($('stronghold').checked) { p.set('stronghold', '1'); p.set('shDist', $('shDist').value); }
+    if (!$('enclosed').checked) p.set('enclosed', '0');
 
     $('results').innerHTML = '';
     $('empty').classList.add('hidden');
@@ -284,6 +291,7 @@
 
     const meta = document.createElement('div'); meta.className = 'meta';
     let t = `spawn ${m.spawnX}, ${m.spawnZ}`;
+    if (m.islandBlocks > 0) t += `  ·  island ≈ ${fmt(Math.round(2 * Math.sqrt(m.islandBlocks / Math.PI)))} blocks wide`;
     if (m.caves > 0) t += `  ·  caves ${m.caves}`;
     if (m.hasStronghold) t += `  ·  stronghold ${m.strongholdDist} blocks`;
     meta.textContent = t;

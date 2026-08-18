@@ -42,6 +42,7 @@ type hit struct {
 	hasStronghold bool
 	strongholdX   int
 	strongholdZ   int
+	islandCells   int
 }
 
 // Config is the pure-Go description of a search. It is translated to a C
@@ -67,6 +68,11 @@ type Config struct {
 
 	RequireStronghold bool
 	StrongholdMaxDist int
+
+	RequireEnclosed bool
+	IslandWindow    int
+	IslandStep      int
+	MinIslandCells  int
 
 	MapStep int // rendering zoom; not part of the C filter
 }
@@ -166,6 +172,11 @@ func toCConfig(cfg Config) C.ScanConfig {
 
 	c.requireStronghold = boolToC(cfg.RequireStronghold)
 	c.strongholdMaxDist = C.int(cfg.StrongholdMaxDist)
+
+	c.requireEnclosed = boolToC(cfg.RequireEnclosed)
+	c.islandWindow = C.int(cfg.IslandWindow)
+	c.islandStep = C.int(cfg.IslandStep)
+	c.minIslandCells = C.int(cfg.MinIslandCells)
 	return c
 }
 
@@ -233,6 +244,7 @@ func defaultConfig() Config {
 	cfg.Cave = []int32{lush}
 	cfg.MatchAllCave = false
 	cfg.MinCave = 3
+	cfg.RequireEnclosed = true
 	return cfg
 }
 
@@ -311,6 +323,7 @@ func search(ctx context.Context, hits chan<- hit, tested *int64, cCfg *C.ScanCon
 			hasStronghold: res.hasStronghold != 0,
 			strongholdX:   int(res.strongholdX),
 			strongholdZ:   int(res.strongholdZ),
+			islandCells:   int(res.islandCells),
 		}:
 		case <-ctx.Done():
 			return

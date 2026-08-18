@@ -40,25 +40,33 @@ type sizePreset struct {
 	OuterRadius    int    `json:"-"`
 	OuterSamples   int    `json:"-"`
 	OuterMinOcean  int    `json:"-"`
+	IslandWindow   int    `json:"-"`
+	IslandStep     int    `json:"-"`
+	MinIslandCells int    `json:"-"`
 	MapStep        int    `json:"-"`
 }
 
 var sizePresets = []sizePreset{
 	{Key: "S", Label: "Small", IslandRadius: 120, GridStep: 12, MinLandPercent: 20,
 		RingRadius: 160, RingSamples: 32, RingMinOcean: 28,
-		OuterRadius: 380, OuterSamples: 40, OuterMinOcean: 30, MapStep: 2},
+		OuterRadius: 380, OuterSamples: 40, OuterMinOcean: 30,
+		IslandWindow: 500, IslandStep: 4, MinIslandCells: 30, MapStep: 2},
 	{Key: "M", Label: "Medium", IslandRadius: 200, GridStep: 16, MinLandPercent: 25,
 		RingRadius: 250, RingSamples: 32, RingMinOcean: 30,
-		OuterRadius: 600, OuterSamples: 48, OuterMinOcean: 38, MapStep: 4},
+		OuterRadius: 600, OuterSamples: 48, OuterMinOcean: 38,
+		IslandWindow: 800, IslandStep: 4, MinIslandCells: 60, MapStep: 4},
 	{Key: "L", Label: "Large", IslandRadius: 320, GridStep: 20, MinLandPercent: 35,
 		RingRadius: 420, RingSamples: 40, RingMinOcean: 34,
-		OuterRadius: 900, OuterSamples: 48, OuterMinOcean: 36, MapStep: 6},
+		OuterRadius: 900, OuterSamples: 48, OuterMinOcean: 36,
+		IslandWindow: 1300, IslandStep: 8, MinIslandCells: 60, MapStep: 6},
 	{Key: "XL", Label: "Huge", IslandRadius: 520, GridStep: 28, MinLandPercent: 45,
 		RingRadius: 660, RingSamples: 48, RingMinOcean: 38,
-		OuterRadius: 1300, OuterSamples: 48, OuterMinOcean: 34, MapStep: 10},
+		OuterRadius: 1300, OuterSamples: 48, OuterMinOcean: 34,
+		IslandWindow: 2000, IslandStep: 8, MinIslandCells: 120, MapStep: 10},
 	{Key: "XXL", Label: "Continent", IslandRadius: 1400, GridStep: 64, MinLandPercent: 70,
 		RingRadius: 0, RingSamples: 0, RingMinOcean: 0,
-		OuterRadius: 1800, OuterSamples: 48, OuterMinOcean: 34, MapStep: 16},
+		OuterRadius: 1800, OuterSamples: 48, OuterMinOcean: 34,
+		IslandWindow: 3200, IslandStep: 16, MinIslandCells: 200, MapStep: 16},
 }
 
 func presetForSize(key string) sizePreset {
@@ -83,6 +91,9 @@ func geometryForSize(key string) Config {
 		OuterRadius:    p.OuterRadius,
 		OuterSamples:   p.OuterSamples,
 		OuterMinOcean:  p.OuterMinOcean,
+		IslandWindow:   p.IslandWindow,
+		IslandStep:     p.IslandStep,
+		MinIslandCells: p.MinIslandCells,
 		MapStep:        p.MapStep,
 	}
 }
@@ -176,6 +187,9 @@ func configFromQuery(r *http.Request) Config {
 		cfg.RequireStronghold = true
 		cfg.StrongholdMaxDist = queryInt(r, "shDist", 1700)
 	}
+
+	// Full-enclosure flood fill is on by default; enclosed=0 turns it off.
+	cfg.RequireEnclosed = q.Get("enclosed") != "0"
 	return cfg
 }
 
@@ -190,6 +204,7 @@ type matchDTO struct {
 	StrongholdX    int   `json:"strongholdX"`
 	StrongholdZ    int   `json:"strongholdZ"`
 	StrongholdDist int   `json:"strongholdDist"`
+	IslandBlocks   int64 `json:"islandBlocks"`
 }
 
 // scanHandler streams scan results as Server-Sent Events, tied to the request
@@ -256,6 +271,7 @@ func scanHandler(w http.ResponseWriter, r *http.Request) {
 			StrongholdX:    h.strongholdX,
 			StrongholdZ:    h.strongholdZ,
 			StrongholdDist: dist,
+			IslandBlocks:   int64(h.islandCells) * int64(cfg.IslandStep) * int64(cfg.IslandStep),
 		})
 		return found < n
 	})
