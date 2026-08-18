@@ -91,6 +91,10 @@
   .card img { display: block; width: 100%; height: auto; margin-top: 10px; border-radius: 10px; background: var(--panel-2); image-rendering: pixelated; aspect-ratio: 1/1; cursor: crosshair; }
   .tip { position: fixed; z-index: 50; pointer-events: none; display: none; background: #0b0e12; color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 5px 9px; font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; box-shadow: 0 6px 18px rgba(0,0,0,.5); }
   .tip b { color: var(--accent); }
+  .sw2 { width: 10px; height: 10px; border-radius: 2px; display: inline-block; margin-right: 7px; vertical-align: middle; border: 1px solid rgba(255,255,255,.35); }
+  .mapwrap { position: relative; margin-top: 10px; line-height: 0; }
+  .mapwrap img { margin-top: 0; }
+  .smark { position: absolute; width: 11px; height: 11px; border-radius: 50%; border: 1.5px solid #0b0e12; transform: translate(-50%, -50%); box-shadow: 0 0 0 1px rgba(255,255,255,.45); cursor: help; }
 </style>
 </head>
 <body>
@@ -146,6 +150,18 @@
     </div>
 
     <div class="group">
+      <div class="glabel"><span>Structures on island</span></div>
+      <div id="reqStructs" class="chips"></div>
+      <div class="hint">Require each selected structure within the island. Stacking several is rare.</div>
+    </div>
+
+    <div class="group">
+      <div class="glabel"><span>Show structures on maps</span></div>
+      <div id="showStructs" class="chips"></div>
+      <div class="hint">Overlay markers on results (independent of the search above).</div>
+    </div>
+
+    <div class="group">
       <div class="glabel"><span>Isolation</span></div>
       <label class="sw"><input type="checkbox" id="enclosed" checked> Entirely surrounded by ocean</label>
       <div class="hint">Flood-fills the spawn island and rejects any land bridge to a mainland (no peninsulas). Exact, but a little slower.</div>
@@ -191,7 +207,7 @@
 <script>
   const $ = (id) => document.getElementById(id);
   let es = null;
-  const state = { size: 'M', surfaceAll: 0, caveAll: 0, sizes: [] };
+  const state = { size: 'M', surfaceAll: 0, caveAll: 0, sizes: [], structs: [], showStructs: new Set() };
 
   fetch('/api/biomes').then(r => r.json()).then(setup).catch(() => {
     $('empty').textContent = 'Could not load biome list (is the server running?).';
@@ -213,6 +229,9 @@
     buildChips('surface', d.surface, d.maxSurface);
     buildChips('ocean', d.ocean, 0);
     buildChips('cave', d.cave, 0);
+    buildChips('reqStructs', d.structures, 0);
+    state.structs = d.structures;
+    buildShowStructs(d.structures);
     $('surfCount').textContent = '(0/' + d.maxSurface + ')';
     bindToggle('surfaceMode', v => state.surfaceAll = v);
     bindToggle('caveMode', v => state.caveAll = v);
@@ -378,6 +397,8 @@
     if ($('stronghold').checked) { p.set('stronghold', '1'); p.set('shDist', $('shDist').value); }
     if (!$('enclosed').checked) p.set('enclosed', '0');
     else if ($('moat').value !== '0') p.set('moat', $('moat').value);
+    const reqS = selected('reqStructs');
+    if (reqS.length) p.set('structures', reqS.join(','));
 
     $('results').innerHTML = '';
     $('empty').classList.add('hidden');
@@ -417,14 +438,18 @@
     if (m.hasStronghold) t += `  ·  stronghold ${m.strongholdDist} blocks`;
     meta.textContent = t;
 
+    const wrap = document.createElement('div'); wrap.className = 'mapwrap';
+    wrap.dataset.seed = m.seed; wrap.dataset.step = m.step;
     const img = document.createElement('img'); img.loading = 'lazy';
     img.alt = 'map for seed ' + m.seed; img.src = '/api/map?' + q.toString();
     img.dataset.seed = m.seed; img.dataset.step = m.step;
     img.addEventListener('pointermove', onMapHover);
     img.addEventListener('pointerleave', hideTip);
+    wrap.appendChild(img);
 
-    card.append(top, meta, img);
+    card.append(top, meta, wrap);
     $('results').prepend(card);
+    if (state.showStructs.size) ensureStructs(wrap, () => renderMarkers(wrap));
   }
 
   function copySeed(text, btn) {
@@ -433,6 +458,59 @@
   }
   function fb(text, ok) { const ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); ok(); } catch (_) {} document.body.removeChild(ta); }
   function fmt(n) { return Number(n).toLocaleString(); }
+
+  // ---- structure display toggles + map overlays ---------------------------
+  function buildShowStructs(list) {
+    const box = $('showStructs'); box.innerHTML = '';
+    list.forEach((st) => {
+      const c = document.createElement('span'); c.className = 'chip'; c.dataset.key = st.key;
+      c.innerHTML = `<span class="sw2" style="background:${st.color}"></span>${st.label}`;
+      c.onclick = () => {
+        c.classList.toggle('on');
+        if (c.classList.contains('on')) state.showStructs.add(st.key); else state.showStructs.delete(st.key);
+        refreshAllOverlays();
+      };
+      box.appendChild(c);
+    });
+  }
+
+  function ensureStructs(wrap, cb) {
+    if (wrap._structs) { cb && cb(); return; }
+    const step = parseInt(wrap.dataset.step, 10) || 4;
+    const half = 256 * step; // the map spans +/- 256 pixels * step blocks
+    const types = state.structs.map((s) => s.key).join(',');
+    fetch(`/api/structures?seed=${encodeURIComponent(wrap.dataset.seed)}&types=${types}&half=${half}`)
+      .then((r) => r.json())
+      .then((d) => { wrap._structs = d; cb && cb(); })
+      .catch(() => {});
+  }
+
+  function renderMarkers(wrap) {
+    if (!wrap._structs) return;
+    wrap.querySelectorAll('.smark').forEach((e) => e.remove());
+    const step = parseInt(wrap.dataset.step, 10) || 4;
+    state.structs.forEach((st) => {
+      if (!state.showStructs.has(st.key)) return;
+      (wrap._structs[st.key] || []).forEach(([x, z]) => {
+        const px = x / step + 256, py = z / step + 256;
+        if (px < 0 || px > 512 || py < 0 || py > 512) return;
+        const m = document.createElement('div');
+        m.className = 'smark';
+        m.style.left = (px / 512 * 100) + '%';
+        m.style.top = (py / 512 * 100) + '%';
+        m.style.background = st.color;
+        m.title = `${st.label} (${x}, ${z})`;
+        wrap.appendChild(m);
+      });
+    });
+  }
+
+  function refreshAllOverlays() {
+    document.querySelectorAll('#results .mapwrap').forEach((wrap) => {
+      if (state.showStructs.size === 0) { wrap.querySelectorAll('.smark').forEach((e) => e.remove()); return; }
+      ensureStructs(wrap, () => renderMarkers(wrap));
+    });
+  }
 
   // ---- map hover tooltip (coords + biome) ---------------------------------
   let tipEl = null, tipState = null, tipReqToken = 0, tipLastCell = '';

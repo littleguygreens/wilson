@@ -37,6 +37,11 @@ parameters:
   (none selected = any ocean).
 - **Cave biomes** — desired underground biomes, with All / Any and a minimum
   sample count.
+- **Structures on island** — require one or more structures (village, pillager
+  outpost, woodland mansion, ocean monument, ruined portal, ancient city, trial
+  chamber) to have a viable instance within the island. Stacking several is rare.
+- **Show structures on maps** — independent per-type toggles overlay colour-coded
+  markers on every result map (hover a marker for its name and coordinates).
 - **Isolation** (on by default) — flood-fills the land connected to spawn and
   rejects it if that blob reaches the edge of the search window, i.e. it is
   joined to a mainland by a land bridge. This catches peninsulas of any width

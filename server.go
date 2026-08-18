@@ -108,6 +108,7 @@ func runServer(addr string) error {
 	mux.HandleFunc("/api/scan", scanHandler)
 	mux.HandleFunc("/api/map", mapHandler)
 	mux.HandleFunc("/api/biome", biomeHandler)
+	mux.HandleFunc("/api/structures", structuresHandler)
 
 	log.Printf("wilson web UI on http://localhost%s  (open it from your phone using this machine's LAN IP)", addr)
 	return http.ListenAndServe(addr, mux)
@@ -128,10 +129,16 @@ func biomesHandler(w http.ResponseWriter, r *http.Request) {
 		Key   string `json:"key"`
 		Label string `json:"label"`
 	}
+	type structOpt struct {
+		Key   string `json:"key"`
+		Label string `json:"label"`
+		Color string `json:"color"`
+	}
 	out := struct {
 		Surface    []opt        `json:"surface"`
 		Ocean      []opt        `json:"ocean"`
 		Cave       []opt        `json:"cave"`
+		Structures []structOpt  `json:"structures"`
 		Sizes      []sizePreset `json:"sizes"`
 		MaxSurface int          `json:"maxSurface"`
 	}{Sizes: sizePresets, MaxSurface: maxSurface}
@@ -145,6 +152,38 @@ func biomesHandler(w http.ResponseWriter, r *http.Request) {
 			out.Ocean = append(out.Ocean, o)
 		case "cave":
 			out.Cave = append(out.Cave, o)
+		}
+	}
+	for _, e := range structCatalog {
+		out.Structures = append(out.Structures, structOpt{Key: e.Key, Label: e.Label, Color: e.Color})
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(out)
+}
+
+// structuresHandler returns the positions of the requested structure types
+// within a square of half-size `half` around the origin, for the map overlays.
+func structuresHandler(w http.ResponseWriter, r *http.Request) {
+	seed, err := strconv.ParseInt(r.URL.Query().Get("seed"), 10, 64)
+	if err != nil {
+		http.Error(w, "bad seed", http.StatusBadRequest)
+		return
+	}
+	half := queryInt(r, "half", 1536)
+	if half < 1 {
+		half = 1
+	}
+	if half > 100000 {
+		half = 100000
+	}
+	out := map[string][][2]int{}
+	for _, k := range strings.Split(r.URL.Query().Get("types"), ",") {
+		k = strings.TrimSpace(k)
+		if k == "" {
+			continue
+		}
+		if id, ok := structKeyToID(k); ok {
+			out[k] = structuresAt(uint64(seed), id, half)
 		}
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -170,6 +209,21 @@ func keysToIDs(csv string, limit int) []int32 {
 	return ids
 }
 
+// structKeysToIDs maps comma-separated structure keys to cubiomes ids.
+func structKeysToIDs(csv string) []int32 {
+	var ids []int32
+	for _, k := range strings.Split(csv, ",") {
+		k = strings.TrimSpace(k)
+		if k == "" {
+			continue
+		}
+		if id, ok := structKeyToID(k); ok {
+			ids = append(ids, id)
+		}
+	}
+	return ids
+}
+
 // configFromQuery builds a search Config from the request parameters.
 func configFromQuery(r *http.Request) Config {
 	q := r.URL.Query()
@@ -188,6 +242,11 @@ func configFromQuery(r *http.Request) Config {
 	if q.Get("stronghold") == "1" {
 		cfg.RequireStronghold = true
 		cfg.StrongholdMaxDist = queryInt(r, "shDist", 1700)
+	}
+
+	if s := q.Get("structures"); s != "" {
+		cfg.Structures = structKeysToIDs(s)
+		cfg.StructRadius = cfg.IslandRadius
 	}
 
 	// Full-enclosure flood fill is on by default; enclosed=0 turns it off.

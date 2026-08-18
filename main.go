@@ -5,6 +5,7 @@ package main
 #cgo LDFLAGS: -L${SRCDIR}/cubiomes -lcubiomes -lm
 #include <stdlib.h>
 #include "generator.h"
+#include "finders.h"
 #include "util.h"
 #include "scan.h"
 */
@@ -79,6 +80,9 @@ type Config struct {
 	MinIslandCells  int
 	MinMoat         int
 
+	Structures   []int32
+	StructRadius int
+
 	MapStep int // rendering zoom; not part of the C filter
 }
 
@@ -145,6 +149,55 @@ func biomeKeyToID(key string) (int32, bool) {
 	return 0, false
 }
 
+// structEntry ties a UI key to a cubiomes StructureType, a label and a map
+// marker colour. Mineshafts are omitted: they use a different cubiomes API and
+// are near-ubiquitous underground, so they make a poor filter and a noisy marker.
+type structEntry struct {
+	Key   string
+	Label string
+	Color string
+	id    int32
+}
+
+var structCatalog = []structEntry{
+	{"village", "Village", "#f2c14e", int32(C.Village)},
+	{"outpost", "Pillager Outpost", "#e05a4f", int32(C.Outpost)},
+	{"mansion", "Woodland Mansion", "#b07a3f", int32(C.Mansion)},
+	{"monument", "Ocean Monument", "#37b7a8", int32(C.Monument)},
+	{"ruined_portal", "Ruined Portal", "#a878f0", int32(C.Ruined_Portal)},
+	{"ancient_city", "Ancient City", "#4a90d9", int32(C.Ancient_City)},
+	{"trial_chambers", "Trial Chamber", "#e8873a", int32(C.Trial_Chambers)},
+}
+
+func structKeyToID(key string) (int32, bool) {
+	for _, e := range structCatalog {
+		if e.Key == key {
+			return e.id, true
+		}
+	}
+	return 0, false
+}
+
+// structuresAt returns the (x,z) positions of one structure type within a
+// square of half-size `half` centred on the origin, for a seed.
+func structuresAt(seed uint64, structType int32, half int) [][2]int {
+	s := biomeGenPool.Get().(unsafe.Pointer)
+	defer biomeGenPool.Put(s)
+	const max = 256
+	out := make([]C.int, max*2)
+	n := int(C.scanner_structures(s, C.uint64_t(seed), C.int(structType),
+		C.int(-half), C.int(-half), C.int(half), C.int(half),
+		(*C.int)(unsafe.Pointer(&out[0])), C.int(max)))
+	if n > max {
+		n = max
+	}
+	res := make([][2]int, 0, n)
+	for i := 0; i < n; i++ {
+		res = append(res, [2]int{int(out[i*2]), int(out[i*2+1])})
+	}
+	return res
+}
+
 // toCConfig marshals a Go Config into the C struct passed to scanner_check.
 func toCConfig(cfg Config) C.ScanConfig {
 	var c C.ScanConfig
@@ -183,6 +236,9 @@ func toCConfig(cfg Config) C.ScanConfig {
 	c.islandStep = C.int(cfg.IslandStep)
 	c.minIslandCells = C.int(cfg.MinIslandCells)
 	c.minMoat = C.int(cfg.MinMoat)
+
+	c.nStructures = putList(&c.structures, cfg.Structures)
+	c.structRadius = C.int(cfg.StructRadius)
 	return c
 }
 

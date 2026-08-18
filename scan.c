@@ -206,6 +206,10 @@ void scanner_free(void *s)
 
 /* ---- the actual filter ----------------------------------------------- */
 
+/* Defined below, in the structures section. */
+static int struct_exists(Generator *g, uint64_t seed, int type,
+                         int x0, int z0, int x1, int z1);
+
 ScanResult scanner_check(void *s, uint64_t seed, const ScanConfig *cfg)
 {
     Generator *g = (Generator *)s;
@@ -311,6 +315,14 @@ ScanResult scanner_check(void *s, uint64_t seed, const ScanConfig *cfg)
         r.moatBlocks = moat;
     }
 
+    /* 5c. Required structures: each must have a viable instance near the island. */
+    if (cfg->nStructures > 0) {
+        int R = cfg->structRadius > 0 ? cfg->structRadius : cfg->islandRadius;
+        for (int i = 0; i < cfg->nStructures; i++)
+            if (!struct_exists(g, seed, cfg->structures[i], -R, -R, R, R))
+                return r;
+    }
+
     /* 6. Stronghold containment (continent mode). The nearest of the first-ring
      *    strongholds must sit on land within strongholdMaxDist. Most expensive
      *    check, so it runs last on already-promising seeds. */
@@ -346,6 +358,50 @@ int scanner_biome(void *s, uint64_t seed, int x, int y, int z)
     Generator *g = (Generator *)s;
     applySeed(g, DIM_OVERWORLD, seed);
     return biome_at_block(g, x, y, z);
+}
+
+/* ---- structures ------------------------------------------------------ */
+/* Note: floordiv() (round toward -inf) comes from cubiomes' rng.h. */
+
+/* Does a viable instance of `type` exist within the block box? Early-out. The
+ * generator must already be seeded for the overworld. */
+static int struct_exists(Generator *g, uint64_t seed, int type,
+                         int x0, int z0, int x1, int z1)
+{
+    StructureConfig sc;
+    if (!getStructureConfig(type, MC_VERSION, &sc)) return 0;
+    int reg = sc.regionSize * 16;
+    if (reg <= 0) return 0;
+    for (int rz = floordiv(z0, reg); rz <= floordiv(z1, reg); rz++)
+        for (int rx = floordiv(x0, reg); rx <= floordiv(x1, reg); rx++) {
+            Pos p;
+            if (!getStructurePos(type, MC_VERSION, seed, rx, rz, &p)) continue;
+            if (p.x < x0 || p.x > x1 || p.z < z0 || p.z > z1) continue;
+            if (isViableStructurePos(type, g, p.x, p.z, 0)) return 1;
+        }
+    return 0;
+}
+
+int scanner_structures(void *s, uint64_t seed, int structType,
+                       int x0, int z0, int x1, int z1, int *out, int max)
+{
+    Generator *g = (Generator *)s;
+    applySeed(g, DIM_OVERWORLD, seed);
+    StructureConfig sc;
+    if (!getStructureConfig(structType, MC_VERSION, &sc)) return 0;
+    int reg = sc.regionSize * 16;
+    if (reg <= 0) return 0;
+    int cnt = 0;
+    for (int rz = floordiv(z0, reg); rz <= floordiv(z1, reg); rz++)
+        for (int rx = floordiv(x0, reg); rx <= floordiv(x1, reg); rx++) {
+            Pos p;
+            if (!getStructurePos(structType, MC_VERSION, seed, rx, rz, &p)) continue;
+            if (p.x < x0 || p.x > x1 || p.z < z0 || p.z > z1) continue;
+            if (!isViableStructurePos(structType, g, p.x, p.z, 0)) continue;
+            if (cnt < max) { out[cnt * 2] = p.x; out[cnt * 2 + 1] = p.z; }
+            cnt++;
+        }
+    return cnt;
 }
 
 /* ---- map rendering support ------------------------------------------- */

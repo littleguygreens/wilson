@@ -59,6 +59,13 @@ typedef struct {
      * other landmass must be at least this many blocks. 0 just requires
      * enclosure (any gap). Larger values dial in more isolation (rarer). */
     int minMoat;
+
+    /* Required structures: each listed cubiomes StructureType must have a
+     * viable instance within structRadius blocks of spawn. Empty = no
+     * requirement. */
+    int structures[SCAN_MAX_LIST];
+    int nStructures;
+    int structRadius;
 } ScanConfig;
 
 /* What a single seed check gives back. */
@@ -83,6 +90,12 @@ ScanResult  scanner_check(void *s, uint64_t seed, const ScanConfig *cfg);
 
 /* Biome id at a single block coordinate (for the hover tooltip). */
 int         scanner_biome(void *s, uint64_t seed, int x, int y, int z);
+
+/* Finds viable instances of one structure type (a cubiomes StructureType) whose
+ * position falls in the block box [x0,z0]-[x1,z1]. Writes up to `max` (x,z)
+ * pairs into out[2*max]; returns how many were found (may exceed max). */
+int         scanner_structures(void *s, uint64_t seed, int structType,
+                               int x0, int z0, int x1, int z1, int *out, int max);
 
 /* Fills out[size*size] with biome ids for a square centred on 0,0.
  * step = blocks per pixel. y = block height to sample at. */
