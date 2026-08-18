@@ -9,11 +9,13 @@ package main
 import "C"
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"image"
 	"image/color"
 	"image/png"
+	"io"
 	"log"
 	"math/rand/v2"
 	"os"
@@ -44,58 +46,86 @@ func main() {
 	wanted := flag.Int("n", 5, "stop after this many matching seeds")
 	outDir := flag.String("out", "matches", "directory for PNG maps")
 	workers := flag.Int("workers", runtime.NumCPU(), "concurrent workers")
+	serve := flag.Bool("serve", false, "run the mobile web UI instead of a one-off CLI scan")
+	addr := flag.String("addr", ":8080", "address for the web UI (used with -serve)")
 	flag.Parse()
+
+	if *serve {
+		log.Fatal(runServer(*addr))
+	}
 
 	if err := os.MkdirAll(*outDir, 0o755); err != nil {
 		log.Fatal(err)
 	}
 
-	var tested, found int64
-	hits := make(chan hit)
-	stop := make(chan struct{})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	var wg sync.WaitGroup
-	for i := 0; i < *workers; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			search(hits, stop, &tested)
-		}()
-	}
-
-	// The renderer needs its own generator too, for the same reason the
-	// workers do -- see the comment in search().
+	// The renderer needs its own generator, for the same reason the workers do
+	// -- see the comment in search().
 	renderer := C.scanner_new()
 	defer C.scanner_free(renderer)
-	palette := loadPalette()
 
-	for h := range hits {
-		n := atomic.AddInt64(&found, 1)
+	var tested int64
+	found := 0
+	runScan(ctx, *workers, &tested, func(h hit) bool {
+		found++
 		fmt.Printf("seed %d  spawn %d,%d  lush samples %d\n",
 			int64(h.seed), h.spawnX, h.spawnZ, h.lushCount)
 
 		path := filepath.Join(*outDir, fmt.Sprintf("%d.png", int64(h.seed)))
-		if err := renderMap(renderer, h, palette, path); err != nil {
+		if err := writeMapPNG(renderer, h, path); err != nil {
 			log.Printf("render %d: %v", int64(h.seed), err)
 		}
 
-		if n >= int64(*wanted) {
-			close(stop)
-			break
-		}
-	}
-
-	// Drain so the workers can exit rather than block on an unread channel.
-	go func() {
-		for range hits {
-		}
-	}()
-	wg.Wait()
+		// Returning false tells runScan to stop the workers.
+		return found < *wanted
+	})
 
 	fmt.Printf("\ntested %d seeds\n", atomic.LoadInt64(&tested))
 }
 
-func search(hits chan<- hit, stop <-chan struct{}, tested *int64) {
+// runScan spins up the worker pool and calls onHit for every matching seed, in
+// the order they arrive. onHit returns false to stop the scan; runScan also
+// stops when ctx is cancelled (e.g. an HTTP client disconnecting). It blocks
+// until every worker has exited, leaving no goroutines behind.
+func runScan(parent context.Context, workers int, tested *int64, onHit func(hit) bool) {
+	if workers < 1 {
+		workers = 1
+	}
+
+	ctx, cancel := context.WithCancel(parent)
+	defer cancel()
+
+	hits := make(chan hit)
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			search(ctx, hits, tested)
+		}()
+	}
+
+	// Close hits once every worker has returned so the range below terminates.
+	go func() {
+		wg.Wait()
+		close(hits)
+	}()
+
+	stopped := false
+	for h := range hits {
+		if stopped {
+			continue // draining so workers never block on a send
+		}
+		if !onHit(h) {
+			stopped = true
+			cancel() // workers select on ctx.Done() and return
+		}
+	}
+}
+
+func search(ctx context.Context, hits chan<- hit, tested *int64) {
 	// One generator per goroutine. cubiomes' Generator struct holds mutable
 	// state that applySeed() overwrites, so two goroutines sharing one would
 	// silently corrupt each other's results -- no crash, just wrong answers.
@@ -109,7 +139,7 @@ func search(hits chan<- hit, stop <-chan struct{}, tested *int64) {
 
 	for {
 		select {
-		case <-stop:
+		case <-ctx.Done():
 			return
 		default:
 		}
@@ -128,38 +158,47 @@ func search(hits chan<- hit, stop <-chan struct{}, tested *int64) {
 			spawnZ:    int(res.spawnZ),
 			lushCount: int(res.lushCount),
 		}:
-		case <-stop:
+		case <-ctx.Done():
 			return
 		}
 	}
 }
 
-// loadPalette pulls cubiomes' own biome colours across once, so the maps look
-// like the ones you have seen from other seed tools.
-func loadPalette() [256]color.RGBA {
-	var raw [768]C.uchar
-	C.scanner_colors((*C.uchar)(unsafe.Pointer(&raw[0])))
+// palette pulls cubiomes' own biome colours across once, so the maps look like
+// the ones you have seen from other seed tools. Loaded lazily and cached, since
+// both the CLI and the web server want it.
+var (
+	paletteOnce sync.Once
+	paletteData [256]color.RGBA
+)
 
-	var p [256]color.RGBA
-	for i := 0; i < 256; i++ {
-		p[i] = color.RGBA{
-			R: uint8(raw[i*3+0]),
-			G: uint8(raw[i*3+1]),
-			B: uint8(raw[i*3+2]),
-			A: 255,
+func palette() [256]color.RGBA {
+	paletteOnce.Do(func() {
+		var raw [768]C.uchar
+		C.scanner_colors((*C.uchar)(unsafe.Pointer(&raw[0])))
+		for i := 0; i < 256; i++ {
+			paletteData[i] = color.RGBA{
+				R: uint8(raw[i*3+0]),
+				G: uint8(raw[i*3+1]),
+				B: uint8(raw[i*3+2]),
+				A: 255,
+			}
 		}
-	}
-	return p
+	})
+	return paletteData
 }
 
-func renderMap(s unsafe.Pointer, h hit, palette [256]color.RGBA, path string) error {
+// renderImage draws the biome map for a seed and marks spawn with a white
+// cross. The generator s is borrowed for the duration of the call.
+func renderImage(s unsafe.Pointer, seed uint64, spawnX, spawnZ int) *image.RGBA {
 	// Allocate the grid in Go and hand C a pointer to it. Because the slice is
 	// only borrowed for the duration of the call and C keeps no reference to
 	// it, this is safe under cgo's pointer rules.
 	grid := make([]C.int, mapSize*mapSize)
-	C.scanner_biome_grid(s, C.uint64_t(h.seed), mapSize, mapStep, mapY,
+	C.scanner_biome_grid(s, C.uint64_t(seed), mapSize, mapStep, mapY,
 		(*C.int)(unsafe.Pointer(&grid[0])))
 
+	p := palette()
 	img := image.NewRGBA(image.Rect(0, 0, mapSize, mapSize))
 	for j := 0; j < mapSize; j++ {
 		for i := 0; i < mapSize; i++ {
@@ -167,24 +206,39 @@ func renderMap(s unsafe.Pointer, h hit, palette [256]color.RGBA, path string) er
 			if id < 0 || id > 255 {
 				id = 0
 			}
-			img.SetRGBA(i, j, palette[id])
+			img.SetRGBA(i, j, p[id])
 		}
 	}
 
 	// Mark spawn with a small white cross.
 	half := mapSize / 2
-	sx := half + h.spawnX/mapStep
-	sz := half + h.spawnZ/mapStep
+	sx := half + spawnX/mapStep
+	sz := half + spawnZ/mapStep
 	white := color.RGBA{255, 255, 255, 255}
 	for d := -4; d <= 4; d++ {
 		img.SetRGBA(sx+d, sz, white)
 		img.SetRGBA(sx, sz+d, white)
 	}
+	return img
+}
 
+// writeMapPNG renders a hit's map using an existing generator and writes it to
+// disk. Used by the CLI.
+func writeMapPNG(s unsafe.Pointer, h hit, path string) error {
+	img := renderImage(s, h.seed, h.spawnX, h.spawnZ)
 	f, err := os.Create(path)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
 	return png.Encode(f, img)
+}
+
+// renderPNG renders a map straight to w (e.g. an HTTP response). It owns its own
+// generator, so it is safe to call concurrently. Used by the web server.
+func renderPNG(w io.Writer, seed uint64, spawnX, spawnZ int) error {
+	s := C.scanner_new()
+	defer C.scanner_free(s)
+	img := renderImage(s, seed, spawnX, spawnZ)
+	return png.Encode(w, img)
 }

@@ -22,6 +22,24 @@ Flags:
     -n        stop after this many matches (default 5)
     -out      directory for the PNG maps (default ./matches)
     -workers  concurrent workers (default: CPU count)
+    -serve    run the mobile web UI instead of a one-off CLI scan
+    -addr     address for the web UI (default :8080, used with -serve)
+
+## Web UI (control it from your phone)
+
+Run the scanner as a small web server on any machine with the build
+toolchain, then drive it from your phone's browser:
+
+    ./seedscan -serve
+
+Open `http://<that-machine's-LAN-IP>:8080` on your phone. Set the number of
+matches and workers, tap **Scan**, and matching seeds stream in live with
+their biome maps. Tap a seed to copy it. Nothing is written to disk in this
+mode -- maps are rendered on demand.
+
+The page is served from `web/index.html` (embedded into the binary at build
+time), and the scan streams over Server-Sent Events, so a long dry spell
+still shows live progress.
 
 ## Tuning
 
