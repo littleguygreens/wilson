@@ -61,7 +61,17 @@ parameters:
 
 Matching seeds stream in live with their biome maps (white cross = spawn, red
 pin = stronghold). Tap a seed to copy it. Hover the map to read the block
-coordinates and biome under the cursor. Nothing is written to disk in this
+coordinates and biome under the cursor.
+
+## Saving finds
+
+Tap **☆ Save** on any result to keep it. The **Saved** tab lists your kept
+seeds, each rebuilt as a full interactive card (map, structure overlays,
+underground layer, tooltips) — everything is derived from the seed, so nothing
+but the seed and a little metadata needs storing. Saved seeds live in the
+browser; **Export JSON** writes a portable file you can back up or move to
+another machine, and **Import JSON** loads it back. The file is just a list of
+finds, so it stays small and human-readable. Nothing is written to disk in this
 mode -- maps are rendered on demand. The page is served from `web/index.html`
 (embedded into the binary at build time) and streams over Server-Sent Events,
 so a long dry spell still shows live progress.

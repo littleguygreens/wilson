@@ -24,6 +24,13 @@
   header h1 { font-size: 20px; margin: 0; }
   header p { margin: 0; color: var(--muted); font-size: 13px; }
 
+  .tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+  .tabs button { flex: 1; background: var(--panel); border: 1px solid var(--line); color: var(--muted); border-radius: 10px; padding: 11px; font-size: 15px; font-weight: 600; cursor: pointer; }
+  .tabs button.on { background: var(--chip-on); border-color: var(--accent); color: var(--text); }
+  .cardbtns { display: flex; gap: 7px; flex: none; }
+  .savedbtns { display: flex; gap: 8px; }
+  .btn2 { flex: 1; text-align: center; background: var(--panel-2); border: 1px solid var(--line); color: var(--text); border-radius: 10px; padding: 11px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .btn2:active { background: var(--chip-on); }
   .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin-bottom: 12px; }
   .group { margin-bottom: 16px; }
   .group:last-child { margin-bottom: 0; }
@@ -108,6 +115,12 @@
     <p>survival island finder</p>
   </header>
 
+  <div class="tabs">
+    <button id="tabSearch" class="on" onclick="showTab('search')">Search</button>
+    <button id="tabSaved" onclick="showTab('saved')">Saved <span id="savedCount">(0)</span></button>
+  </div>
+
+  <div id="searchView">
   <div class="panel">
     <div class="group">
       <div class="glabel"><span>Presets</span></div>
@@ -215,6 +228,19 @@
 
   <div id="results"></div>
   <div id="empty" class="empty">Pick your parameters and tap Scan.</div>
+  </div><!-- /searchView -->
+
+  <div id="savedView" class="hidden">
+    <div class="panel">
+      <div class="hint" style="margin-bottom:10px">Saved seeds are stored in this browser. Export a file to keep a portable record or move it between machines; import one to reopen your finds with full maps, overlays and tooltips.</div>
+      <div class="savedbtns">
+        <button class="btn2" onclick="exportSaved()">⭳ Export JSON</button>
+        <label class="btn2" style="cursor:pointer">⭱ Import JSON<input id="importFile" type="file" accept="application/json,.json" hidden></label>
+      </div>
+    </div>
+    <div id="savedResults"></div>
+    <div id="savedEmpty" class="empty">No saved seeds yet — tap ☆ Save on a result to keep it here.</div>
+  </div>
 </div>
 
 <script>
@@ -258,7 +284,9 @@
     };
     $('caveY').oninput = () => { state.caveY = parseInt($('caveY').value, 10); $('caveYVal').textContent = 'y = ' + state.caveY; };
     $('caveY').onchange = () => { if (state.caveView) applyLayerAll(); };
+    $('importFile').onchange = (e) => { const f = e.target.files[0]; if (f) importSaved(f); e.target.value = ''; };
     renderPresets();
+    updateSavedUI();
   }
 
   // ---- presets (saved in the browser) -------------------------------------
@@ -437,15 +465,34 @@
 
   function addMatch(m) {
     $('found').textContent = String((parseInt($('found').textContent, 10) || 0) + 1);
+    $('results').prepend(makeCard(m, false));
+  }
+
+  // makeCard builds a result card from a match record. Because the map, overlays
+  // and tooltip are all derived from the seed server-side, a saved record
+  // rebuilds an identical, fully interactive card. isSaved swaps Save for Remove.
+  function makeCard(m, isSaved) {
     const q = new URLSearchParams({ seed: m.seed, step: m.step, sx: m.spawnX, sz: m.spawnZ });
     if (m.hasStronghold) { q.set('st', '1'); q.set('stx', m.strongholdX); q.set('stz', m.strongholdZ); }
 
     const card = document.createElement('div'); card.className = 'card';
     const top = document.createElement('div'); top.className = 'top';
     const seed = document.createElement('span'); seed.className = 'seed'; seed.textContent = m.seed;
+    const btns = document.createElement('div'); btns.className = 'cardbtns';
     const copy = document.createElement('button'); copy.className = 'copy'; copy.textContent = 'Copy';
     copy.onclick = () => copySeed(String(m.seed), copy);
-    top.append(seed, copy);
+    const act = document.createElement('button'); act.className = 'copy';
+    if (isSaved) {
+      act.textContent = 'Remove';
+      act.onclick = () => { removeSaved(m.seed); card.remove(); updateSavedUI(); if (!$('savedResults').children.length) $('savedEmpty').classList.remove('hidden'); };
+    } else {
+      const on = isSavedSeed(m.seed);
+      act.textContent = on ? '★ Saved' : '☆ Save';
+      if (on) act.classList.add('done');
+      act.onclick = () => toggleSave(m, act);
+    }
+    btns.append(copy, act);
+    top.append(seed, btns);
 
     const meta = document.createElement('div'); meta.className = 'meta';
     let t = `spawn ${m.spawnX}, ${m.spawnZ}`;
@@ -469,8 +516,68 @@
     wrap._legend = legend;
 
     card.append(top, meta, wrap, legend);
-    $('results').prepend(card);
     if (state.showStructs.size) ensureStructs(wrap, () => renderMarkers(wrap));
+    return card;
+  }
+
+  // ---- saved seeds (localStorage + export/import) -------------------------
+  const SAVED_KEY = 'wilson.saved';
+  function loadSaved() { try { return JSON.parse(localStorage.getItem(SAVED_KEY) || '[]'); } catch (_) { return []; } }
+  function persistSaved(a) { try { localStorage.setItem(SAVED_KEY, JSON.stringify(a)); } catch (_) {} }
+  function isSavedSeed(seed) { return loadSaved().some((x) => String(x.seed) === String(seed)); }
+  function updateSavedUI() { $('savedCount').textContent = '(' + loadSaved().length + ')'; }
+
+  function toggleSave(m, btn) {
+    const a = loadSaved();
+    const i = a.findIndex((x) => String(x.seed) === String(m.seed));
+    if (i >= 0) { a.splice(i, 1); btn.textContent = '☆ Save'; btn.classList.remove('done'); }
+    else { a.push(Object.assign({ savedAt: Date.now() }, m)); btn.textContent = '★ Saved'; btn.classList.add('done'); }
+    persistSaved(a); updateSavedUI();
+  }
+  function removeSaved(seed) { persistSaved(loadSaved().filter((x) => String(x.seed) !== String(seed))); }
+
+  function renderSaved() {
+    const box = $('savedResults'); box.innerHTML = '';
+    const a = loadSaved();
+    a.slice().reverse().forEach((m) => box.appendChild(makeCard(m, true)));
+    $('savedEmpty').classList.toggle('hidden', a.length > 0);
+    updateSavedUI();
+  }
+
+  function showTab(which) {
+    const search = which === 'search';
+    $('searchView').classList.toggle('hidden', !search);
+    $('savedView').classList.toggle('hidden', search);
+    $('tabSearch').classList.toggle('on', search);
+    $('tabSaved').classList.toggle('on', !search);
+    if (!search) renderSaved();
+  }
+
+  function exportSaved() {
+    const a = loadSaved();
+    if (!a.length) { alert('No saved seeds to export yet.'); return; }
+    const blob = new Blob([JSON.stringify({ app: 'wilson', version: 1, seeds: a }, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url; link.download = 'wilson-seeds-' + new Date().toISOString().slice(0, 10) + '.json';
+    document.body.appendChild(link); link.click(); link.remove();
+    URL.revokeObjectURL(url);
+  }
+  function importSaved(file) {
+    const rd = new FileReader();
+    rd.onload = () => {
+      try {
+        const parsed = JSON.parse(rd.result);
+        const incoming = Array.isArray(parsed) ? parsed : (parsed.seeds || []);
+        const a = loadSaved();
+        const seen = new Set(a.map((x) => String(x.seed)));
+        let added = 0;
+        incoming.forEach((m) => { if (m && m.seed != null && !seen.has(String(m.seed))) { a.push(m); seen.add(String(m.seed)); added++; } });
+        persistSaved(a); renderSaved();
+        alert('Imported ' + added + ' new seed' + (added === 1 ? '' : 's') + ' (' + a.length + ' total).');
+      } catch (e) { alert('Could not read that file: ' + e.message); }
+    };
+    rd.readAsText(file);
   }
 
   function copySeed(text, btn) {
@@ -485,7 +592,7 @@
     img.src = '/api/map?' + img.dataset.mapq + (state.caveView ? ('&y=' + state.caveY) : '');
   }
   function applyLayerAll() {
-    document.querySelectorAll('#results .mapwrap img').forEach(setLayer);
+    document.querySelectorAll('.mapwrap img').forEach(setLayer);
   }
 
   // ---- structure display toggles + map overlays ---------------------------
@@ -556,7 +663,7 @@
   }
 
   function refreshAllOverlays() {
-    document.querySelectorAll('#results .mapwrap').forEach((wrap) => {
+    document.querySelectorAll('.mapwrap').forEach((wrap) => {
       if (state.showStructs.size === 0) {
         wrap.querySelectorAll('.smark').forEach((e) => e.remove());
         if (wrap._legend) wrap._legend.style.display = 'none';
