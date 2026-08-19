@@ -106,6 +106,8 @@
   .maplegend span { display: inline-flex; align-items: center; }
   .maplegend b { color: var(--text); margin-left: 5px; font-variant-numeric: tabular-nums; }
   .maplegend .dotc { width: 9px; height: 9px; border-radius: 50%; display: inline-block; margin-right: 5px; border: 1px solid rgba(255,255,255,.4); }
+  .note { width: 100%; margin-top: 10px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; color: var(--text); font: inherit; font-size: 14px; padding: 10px 12px; resize: vertical; min-height: 40px; }
+  .note:focus { outline: none; border-color: var(--accent); }
 </style>
 </head>
 <body>
@@ -516,8 +518,21 @@
     wrap._legend = legend;
 
     card.append(top, meta, wrap, legend);
+    if (isSaved) {
+      const note = document.createElement('textarea');
+      note.className = 'note'; note.rows = 2; note.placeholder = 'Add a note…';
+      note.value = m.note || '';
+      note.oninput = () => updateSavedNote(m.seed, note.value);
+      card.append(note);
+    }
     if (state.showStructs.size) ensureStructs(wrap, () => renderMarkers(wrap));
     return card;
+  }
+
+  function updateSavedNote(seed, text) {
+    const a = loadSaved();
+    const it = a.find((x) => String(x.seed) === String(seed));
+    if (it) { it.note = text; persistSaved(a); }
   }
 
   // ---- saved seeds (localStorage + export/import) -------------------------

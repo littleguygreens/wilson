@@ -68,8 +68,8 @@ coordinates and biome under the cursor.
 Tap **☆ Save** on any result to keep it. The **Saved** tab lists your kept
 seeds, each rebuilt as a full interactive card (map, structure overlays,
 underground layer, tooltips) — everything is derived from the seed, so nothing
-but the seed and a little metadata needs storing. Saved seeds live in the
-browser; **Export JSON** writes a portable file you can back up or move to
+but the seed and a little metadata needs storing. Each saved card has a **note**
+field for your own remarks. Saved seeds live in the browser; **Export JSON** writes a portable file you can back up or move to
 another machine, and **Import JSON** loads it back. The file is just a list of
 finds, so it stays small and human-readable. Nothing is written to disk in this
 mode -- maps are rendered on demand. The page is served from `web/index.html`
