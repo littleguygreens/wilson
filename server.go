@@ -375,6 +375,7 @@ func mapHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	step := queryInt(r, "step", 4)
+	y := queryInt(r, "y", 60)
 	spawn := marker{queryInt(r, "sx", 0), queryInt(r, "sz", 0)}
 
 	var sh *marker
@@ -384,7 +385,7 @@ func mapHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "image/png")
 	w.Header().Set("Cache-Control", "public, max-age=3600")
-	if err := renderPNG(w, uint64(seed), step, spawn, sh); err != nil {
+	if err := renderPNG(w, uint64(seed), step, y, spawn, sh); err != nil {
 		log.Printf("render map for seed %d: %v", seed, err)
 	}
 }

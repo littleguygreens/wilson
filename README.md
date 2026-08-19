@@ -43,6 +43,10 @@ parameters:
 - **Show structures on maps** — independent per-type toggles overlay colour-coded
   markers on every result map (hover a marker for its name and coordinates), with
   a legend under each map counting how many of each type are in view.
+- **Underground biomes** — a toggle re-renders every map at an underground height
+  (a Y slider, default y = -50, the depth the search samples) so cave biomes
+  (lush / dripstone / deep dark) show as swaths. Since biomes are 3D, it is a
+  single horizontal slice; move the slider to see other depths.
 - **Isolation** (always on) — flood-fills the land connected to spawn and
   rejects it if that blob reaches the edge of the search window, i.e. it is
   joined to a mainland by a land bridge. This catches peninsulas of any width

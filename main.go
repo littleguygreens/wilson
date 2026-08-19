@@ -464,14 +464,14 @@ func palette() [256]color.RGBA {
 	return paletteData
 }
 
-// renderImage draws the biome map for a seed at the given block-per-pixel step,
-// marks spawn, and (if present) marks the stronghold.
-func renderImage(s unsafe.Pointer, seed uint64, step int, spawn marker, sh *marker) *image.RGBA {
+// renderImage draws the biome map for a seed at the given block-per-pixel step
+// and sample height y, marks spawn, and (if present) marks the stronghold.
+func renderImage(s unsafe.Pointer, seed uint64, step, y int, spawn marker, sh *marker) *image.RGBA {
 	if step < 1 {
 		step = 4
 	}
 	grid := make([]C.int, mapPixels*mapPixels)
-	C.scanner_biome_grid(s, C.uint64_t(seed), mapPixels, C.int(step), C.int(60),
+	C.scanner_biome_grid(s, C.uint64_t(seed), mapPixels, C.int(step), C.int(y),
 		(*C.int)(unsafe.Pointer(&grid[0])))
 
 	p := palette()
@@ -555,7 +555,7 @@ func hitMarkers(h hit) (marker, *marker) {
 // disk. Used by the CLI.
 func writeMapPNG(s unsafe.Pointer, h hit, step int, path string) error {
 	spawn, sh := hitMarkers(h)
-	img := renderImage(s, h.seed, step, spawn, sh)
+	img := renderImage(s, h.seed, step, 60, spawn, sh)
 	f, err := os.Create(path)
 	if err != nil {
 		return err
@@ -564,12 +564,12 @@ func writeMapPNG(s unsafe.Pointer, h hit, step int, path string) error {
 	return png.Encode(f, img)
 }
 
-// renderPNG renders a map straight to w. It owns its own generator, so it is
-// safe to call concurrently. Used by the web server.
-func renderPNG(w io.Writer, seed uint64, step int, spawn marker, sh *marker) error {
+// renderPNG renders a map straight to w at sample height y. It owns its own
+// generator, so it is safe to call concurrently. Used by the web server.
+func renderPNG(w io.Writer, seed uint64, step, y int, spawn marker, sh *marker) error {
 	s := C.scanner_new()
 	defer C.scanner_free(s)
-	img := renderImage(s, seed, step, spawn, sh)
+	img := renderImage(s, seed, step, y, spawn, sh)
 	return png.Encode(w, img)
 }
 
