@@ -34,6 +34,13 @@
   .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin-bottom: 12px; }
   .group { margin-bottom: 16px; }
   .group:last-child { margin-bottom: 0; }
+  /* collapsible sections */
+  .group.collapsible > .glabel { cursor: pointer; user-select: none; }
+  .group.collapsible > .glabel::after { content: '⌄'; margin-left: auto; color: var(--muted); font-size: 15px; line-height: 1; transition: transform .15s ease; }
+  .group.collapsible.collapsed > .glabel::after { transform: rotate(-90deg); }
+  .group.collapsible.collapsed > *:not(.glabel) { display: none; }
+  .group.collapsible.collapsed { margin-bottom: 10px; }
+  .group.collapsible.active > .glabel > span::after { content: ' ●'; color: var(--accent); font-size: 10px; vertical-align: middle; }
   .glabel { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
   .glabel span { font-size: 13px; color: var(--muted); }
   .hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
@@ -52,7 +59,7 @@
   .chip.sel-req::before { content: '★ '; color: var(--good); }
   .chip.sel-exc { background: #3a2020; border-color: #ff6b6b; color: #f2c7c7; text-decoration: line-through; }
   .chip.sel-exc::before { content: '✕ '; color: #ff6b6b; text-decoration: none; display: inline-block; }
-  .trilegend { font-size: 12px; color: var(--muted); margin-top: 8px; }
+  .trilegend { font-size: 12px; color: var(--muted); margin: 2px 2px 12px; }
   .trilegend .k { padding: 1px 4px; border-radius: 4px; }
   .trilegend .k.inc { color: var(--accent); }
   .trilegend .k.req { color: var(--good); }
@@ -139,7 +146,7 @@
     <div class="group">
       <div class="glabel"><span>Presets</span></div>
       <div id="presets" class="chips"></div>
-      <div class="hint">Tap to load. Save the current settings as your own — up to 3.</div>
+      <div class="hint">Tap to load, or save the current settings — up to 3.</div>
     </div>
 
     <div class="group">
@@ -148,19 +155,20 @@
       <div id="sizeHint" class="hint"></div>
     </div>
 
-    <div class="group">
+    <div class="trilegend">Chips cycle: <span class="k off">off</span> → <span class="k inc">＋ include</span> → <span class="k req">★ require</span> → <span class="k exc">✕ exclude</span></div>
+
+    <div class="group collapsible" data-sec="biomes">
       <div class="glabel"><span>Island biomes</span></div>
       <div id="surface" class="chips"></div>
-      <div class="trilegend">Tap to cycle: <span class="k off">off</span> → <span class="k inc">＋ include</span> → <span class="k req">★ require</span> → <span class="k exc">✕ exclude</span></div>
     </div>
 
-    <div class="group">
+    <div class="group collapsible" data-sec="ocean">
       <div class="glabel"><span>Ocean types</span></div>
       <div id="ocean" class="chips"></div>
-      <div class="hint"><span style="color:var(--accent)">＋ include</span> = counts as the surrounding sea (none = any ocean). <span style="color:var(--good)">★ require</span> = must appear on the outer ring. <span style="color:#ff6b6b">✕ exclude</span> = must not appear on it.</div>
+      <div class="hint">For oceans, <b>include</b> = counts as the surrounding sea (none = any). <b>require</b>/<b>exclude</b> act on the outer ring.</div>
     </div>
 
-    <div class="group">
+    <div class="group collapsible" data-sec="caves">
       <div class="glabel"><span>Cave biomes</span></div>
       <div id="cave" class="chips"></div>
       <div class="row2" id="minCaveWrap" style="margin-top:10px">
@@ -171,45 +179,40 @@
       </div>
     </div>
 
-    <div class="group">
+    <div class="group collapsible" data-sec="structures">
       <div class="glabel"><span>Structures on island</span></div>
       <div id="reqStructs" class="chips"></div>
-      <div class="trilegend">Tap to cycle: <span class="k off">off</span> → <span class="k inc">＋ include</span> → <span class="k req">★ require</span> → <span class="k exc">✕ exclude</span></div>
     </div>
 
-    <div class="group">
-      <div class="glabel"><span>Show structures on maps</span></div>
-      <div id="showStructs" class="chips"></div>
-      <div class="hint">Overlay markers on results (independent of the search above).</div>
-    </div>
-
-    <div class="group">
-      <div class="glabel"><span>Underground biomes</span></div>
-      <label class="sw"><input type="checkbox" id="caveView"> Show cave biomes on maps</label>
-      <div id="caveYWrap" class="hidden" style="margin-top:10px">
-        <label class="fl">Depth: <b id="caveYVal">y = -50</b></label>
-        <input id="caveY" type="range" min="-64" max="64" step="2" value="-50">
-        <div class="hint">A single horizontal slice. Lush caves, dripstone and deep dark show where they override at this height (the search samples y = -50).</div>
-      </div>
-    </div>
-
-    <div class="group">
+    <div class="group collapsible" data-sec="isolation">
       <div class="glabel"><span>Isolation</span></div>
-      <div class="hint">Every result is fully enclosed by ocean — the spawn island never connects to a mainland by a land bridge.</div>
+      <div class="hint">Every result is fully enclosed by ocean (never joined to a mainland).</div>
       <div id="moatWrap" style="margin-top:12px">
         <label class="fl">Min distance to mainland: <b id="moatVal">any</b></label>
         <input id="moat" type="range" min="0" max="1600" step="100" value="0">
-        <div class="hint">Shortest open-sea gap to the nearest mainland. Small nearby islands don't count. Higher is more isolated — and rarer.</div>
+        <div class="hint">Open-sea gap to the nearest mainland; small islands don't count. Higher = more isolated and rarer.</div>
       </div>
     </div>
 
-    <div class="group">
+    <div class="group collapsible" data-sec="stronghold">
       <div class="glabel"><span>Stronghold</span></div>
       <label class="sw"><input type="checkbox" id="stronghold"> First stronghold on the island</label>
       <div id="shWrap" class="hidden" style="margin-top:10px">
         <label class="fl">Within <b id="shVal">1700</b> blocks</label>
         <input id="shDist" type="range" min="1300" max="2400" step="50" value="1700">
-        <div class="hint">Best with Huge or Continent sizes — smaller islands can't reach a stronghold.</div>
+        <div class="hint">Realistic only at Huge / Continent sizes.</div>
+      </div>
+    </div>
+
+    <div class="group collapsible" data-sec="mapdisplay">
+      <div class="glabel"><span>Map display</span></div>
+      <label class="fl">Structure markers</label>
+      <div id="showStructs" class="chips" style="margin-top:6px"></div>
+      <label class="sw" style="margin-top:12px"><input type="checkbox" id="caveView"> Underground (cave) biomes</label>
+      <div id="caveYWrap" class="hidden" style="margin-top:10px">
+        <label class="fl">Depth: <b id="caveYVal">y = -50</b></label>
+        <input id="caveY" type="range" min="-64" max="64" step="2" value="-50">
+        <div class="hint">A horizontal slice — cave biomes show where they override at this height.</div>
       </div>
     </div>
 
@@ -276,19 +279,55 @@
     buildTriChips('reqStructs', d.structures, state.structSel);
     state.structs = d.structures;
     buildShowStructs(d.structures);
-    $('stronghold').onchange = () => $('shWrap').classList.toggle('hidden', !$('stronghold').checked);
+    $('stronghold').onchange = () => { $('shWrap').classList.toggle('hidden', !$('stronghold').checked); updateBadges(); };
     $('shDist').oninput = () => $('shVal').textContent = $('shDist').value;
-    $('moat').oninput = () => $('moatVal').textContent = ($('moat').value === '0') ? 'any' : fmt($('moat').value) + ' blocks';
+    $('moat').oninput = () => { $('moatVal').textContent = ($('moat').value === '0') ? 'any' : fmt($('moat').value) + ' blocks'; updateBadges(); };
     $('caveView').onchange = () => {
       state.caveView = $('caveView').checked;
       $('caveYWrap').classList.toggle('hidden', !state.caveView);
-      applyLayerAll();
+      applyLayerAll(); updateBadges();
     };
     $('caveY').oninput = () => { state.caveY = parseInt($('caveY').value, 10); $('caveYVal').textContent = 'y = ' + state.caveY; };
     $('caveY').onchange = () => { if (state.caveView) applyLayerAll(); };
     $('importFile').onchange = (e) => { const f = e.target.files[0]; if (f) importSaved(f); e.target.value = ''; };
     renderPresets();
     updateSavedUI();
+    setupCollapsibles();
+    updateBadges();
+  }
+
+  // ---- collapsible sections + active badges -------------------------------
+  const COLLAPSE_KEY = 'wilson.collapsed';
+  const DEFAULT_COLLAPSED = ['ocean', 'caves', 'structures', 'isolation', 'stronghold', 'mapdisplay'];
+
+  function setupCollapsibles() {
+    let saved = null;
+    try { saved = JSON.parse(localStorage.getItem(COLLAPSE_KEY)); } catch (_) {}
+    document.querySelectorAll('.group.collapsible').forEach(g => {
+      const sec = g.dataset.sec;
+      const collapsed = (saved && sec in saved) ? saved[sec] : DEFAULT_COLLAPSED.includes(sec);
+      g.classList.toggle('collapsed', collapsed);
+      g.querySelector('.glabel').onclick = () => { g.classList.toggle('collapsed'); persistCollapsed(); };
+    });
+  }
+  function persistCollapsed() {
+    const o = {};
+    document.querySelectorAll('.group.collapsible').forEach(g => o[g.dataset.sec] = g.classList.contains('collapsed'));
+    try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify(o)); } catch (_) {}
+  }
+  // Mark a collapsed section as "active" (accent dot) when it holds a setting,
+  // so folding a section never hides that it's in use.
+  function updateBadges() {
+    const active = {
+      biomes: state.surfSel.size > 0,
+      ocean: state.oceanSel.size > 0,
+      caves: state.caveSel.size > 0,
+      structures: state.structSel.size > 0,
+      isolation: (parseInt($('moat').value, 10) || 0) > 0,
+      stronghold: $('stronghold').checked,
+      mapdisplay: state.showStructs.size > 0 || state.caveView,
+    };
+    document.querySelectorAll('.group.collapsible').forEach(g => g.classList.toggle('active', !!active[g.dataset.sec]));
   }
 
   // ---- presets (saved in the browser) -------------------------------------
@@ -382,6 +421,7 @@
     $('shDist').value = p.shDist || 1700; $('shDist').oninput();
     $('n').value = p.n || 5;
     $('workers').value = p.workers || '';
+    updateBadges();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -407,6 +447,7 @@
         const next = cur === undefined ? 'inc' : cur === 'inc' ? 'req' : cur === 'req' ? 'exc' : undefined;
         if (next) selMap.set(o.key, next); else selMap.delete(o.key);
         applyTriClass(c, next);
+        updateBadges();
       };
       applyTriClass(c, selMap.get(o.key));
       box.appendChild(c);
@@ -648,7 +689,7 @@
       c.onclick = () => {
         c.classList.toggle('on');
         if (c.classList.contains('on')) state.showStructs.add(st.key); else state.showStructs.delete(st.key);
-        refreshAllOverlays();
+        refreshAllOverlays(); updateBadges();
       };
       box.appendChild(c);
     });
