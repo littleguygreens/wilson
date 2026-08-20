@@ -209,19 +209,27 @@ func keysToIDs(csv string, limit int) []int32 {
 	return ids
 }
 
-// structKeysToIDs maps comma-separated structure keys to cubiomes ids.
-func structKeysToIDs(csv string) []int32 {
-	var ids []int32
-	for _, k := range strings.Split(csv, ",") {
-		k = strings.TrimSpace(k)
-		if k == "" {
-			continue
-		}
-		if id, ok := structKeyToID(k); ok {
-			ids = append(ids, id)
+const scanMaxList = 16 // mirror of SCAN_MAX_LIST in scan.h
+
+// triSelection builds parallel id + mode lists from required/included/excluded
+// comma-separated keys (required first). resolve maps a key to an id.
+func triSelection(req, inc, exc string, resolve func(string) (int32, bool)) (ids, modes []int32) {
+	add := func(csv string, mode int32) {
+		for _, k := range strings.Split(csv, ",") {
+			k = strings.TrimSpace(k)
+			if k == "" {
+				continue
+			}
+			if id, ok := resolve(k); ok && len(ids) < scanMaxList {
+				ids = append(ids, id)
+				modes = append(modes, mode)
+			}
 		}
 	}
-	return ids
+	add(req, selRequired)
+	add(inc, selIncluded)
+	add(exc, selExcluded)
+	return
 }
 
 // configFromQuery builds a search Config from the request parameters.
@@ -229,11 +237,9 @@ func configFromQuery(r *http.Request) Config {
 	q := r.URL.Query()
 	cfg := geometryForSize(q.Get("size"))
 
-	cfg.Surface = keysToIDs(q.Get("surface"), maxSurface)
-	cfg.MatchAllSurface = q.Get("surfaceAll") == "1"
+	cfg.Surface, cfg.SurfaceMode = triSelection(q.Get("surfaceReq"), q.Get("surfaceInc"), q.Get("surfaceExc"), biomeKeyToID)
 	cfg.Ocean = keysToIDs(q.Get("ocean"), 0)
-	cfg.Cave = keysToIDs(q.Get("cave"), 0)
-	cfg.MatchAllCave = q.Get("caveAll") == "1"
+	cfg.Cave, cfg.CaveMode = triSelection(q.Get("caveReq"), q.Get("caveInc"), q.Get("caveExc"), biomeKeyToID)
 	cfg.MinCave = queryInt(r, "minCave", defaultMinCav)
 	if cfg.MinCave < 1 {
 		cfg.MinCave = 1
@@ -244,8 +250,9 @@ func configFromQuery(r *http.Request) Config {
 		cfg.StrongholdMaxDist = queryInt(r, "shDist", 1700)
 	}
 
-	if s := q.Get("structures"); s != "" {
-		cfg.Structures = structKeysToIDs(s)
+	if sid, smode := triSelection(q.Get("structReq"), q.Get("structInc"), q.Get("structExc"), structKeyToID); len(sid) > 0 {
+		cfg.Structures = sid
+		cfg.StructMode = smode
 		cfg.StructRadius = cfg.IslandRadius
 	}
 

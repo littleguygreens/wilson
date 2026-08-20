@@ -29,17 +29,19 @@ parameters:
 - **Island size** S → XXL. Bigger sizes push the surrounding ocean farther
   out and zoom the map so the whole landmass fits. **XXL ("continent")** is a
   large isolated landmass rather than a small island.
-- **Island biomes** — up to 6 desired surface biomes, with an **All / Any**
-  toggle (must contain every one, or at least one).
+- **Island biomes** — tap each biome to cycle its state: **include** (an
+  any-of group — at least one included biome must appear), **require** (must
+  appear), or **exclude** (must not appear).
 - **Presets** — one built-in "Mountain Isle" search, plus up to 3 of your own
   saved in the browser (localStorage). Tap to load a full configuration.
 - **Allowed ocean types** — which ocean biomes count as the isolating sea
   (none selected = any ocean).
-- **Cave biomes** — desired underground biomes, with All / Any and a minimum
-  sample count.
-- **Structures on island** — require one or more structures (village, pillager
-  outpost, woodland mansion, ocean monument, ruined portal, ancient city, trial
-  chamber) to have a viable instance within the island. Stacking several is rare.
+- **Cave biomes** — same include / require / exclude tri-state as surface
+  biomes; a cave counts as present at the minimum-sample threshold.
+- **Structures on island** — include / require / exclude for each structure
+  (village, pillager outpost, woodland mansion, ocean monument, ruined portal,
+  ancient city, trial chamber), checked within the island. Stacking several
+  requirements is rare.
 - **Show structures on maps** — independent per-type toggles overlay colour-coded
   markers on every result map (hover a marker for its name and coordinates), with
   a legend under each map counting how many of each type are in view.

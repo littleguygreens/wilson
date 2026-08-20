@@ -269,22 +269,33 @@ ScanResult scanner_check(void *s, uint64_t seed, const ScanConfig *cfg)
 
     /* Surface biome requirement. */
     if (cfg->nSurface > 0) {
-        unsigned full = (cfg->nSurface >= 32) ? ~0u : ((1u << cfg->nSurface) - 1);
-        if (cfg->matchAllSurface) {
-            if (surfaceSeen != full) return r;
-        } else {
-            if (surfaceSeen == 0) return r;
+        int hasInc = 0, incSeen = 0;
+        for (int i = 0; i < cfg->nSurface; i++) {
+            int present = (surfaceSeen >> i) & 1u;
+            switch (cfg->surfaceMode[i]) {
+            case SEL_REQUIRED: if (!present) return r; break;
+            case SEL_EXCLUDED: if (present) return r; break;
+            default:           hasInc = 1; if (present) incSeen = 1; break;
+            }
         }
+        if (hasInc && !incSeen) return r;
     }
 
-    /* Cave biome requirement. */
+    /* Cave biome requirement. A cave counts as present for required/included at
+     * minCave samples; an excluded cave is rejected on any presence. */
     if (cfg->nCave > 0) {
-        if (cfg->matchAllCave) {
-            for (int i = 0; i < cfg->nCave; i++)
-                if (caveHits[i] < 1) return r;
-        } else {
-            if (caveTotal < cfg->minCave) return r;
+        int thresh = cfg->minCave > 0 ? cfg->minCave : 1;
+        int hasInc = 0, incSeen = 0;
+        for (int i = 0; i < cfg->nCave; i++) {
+            int strong = caveHits[i] >= thresh;
+            int any = caveHits[i] >= 1;
+            switch (cfg->caveMode[i]) {
+            case SEL_REQUIRED: if (!strong) return r; break;
+            case SEL_EXCLUDED: if (any) return r; break;
+            default:           hasInc = 1; if (strong) incSeen = 1; break;
+            }
         }
+        if (hasInc && !incSeen) return r;
     }
     r.caveCount = caveTotal;
 
@@ -315,12 +326,20 @@ ScanResult scanner_check(void *s, uint64_t seed, const ScanConfig *cfg)
         r.moatBlocks = moat;
     }
 
-    /* 5c. Required structures: each must have a viable instance near the island. */
+    /* 5c. Structure requirements: required present, excluded absent, and at
+     *     least one included present (if any). */
     if (cfg->nStructures > 0) {
         int R = cfg->structRadius > 0 ? cfg->structRadius : cfg->islandRadius;
-        for (int i = 0; i < cfg->nStructures; i++)
-            if (!struct_exists(g, seed, cfg->structures[i], -R, -R, R, R))
-                return r;
+        int hasInc = 0, incSeen = 0;
+        for (int i = 0; i < cfg->nStructures; i++) {
+            int present = struct_exists(g, seed, cfg->structures[i], -R, -R, R, R);
+            switch (cfg->structMode[i]) {
+            case SEL_REQUIRED: if (!present) return r; break;
+            case SEL_EXCLUDED: if (present) return r; break;
+            default:           hasInc = 1; if (present) incSeen = 1; break;
+            }
+        }
+        if (hasInc && !incSeen) return r;
     }
 
     /* 6. Stronghold containment (continent mode). The nearest of the first-ring

@@ -11,23 +11,27 @@
  * menu and passed by const pointer into scanner_check. Plain ints only, so it
  * copies across the cgo boundary cleanly. */
 typedef struct {
-    /* Desired island surface biomes. matchAllSurface: 1 = every listed biome
-     * must appear on the island, 0 = at least one. Empty list = no requirement. */
+    /* Each selectable feature carries a mode: SEL_INCLUDED (0), SEL_REQUIRED (1)
+     * or SEL_EXCLUDED (2). Per category the rule is: every REQUIRED must be
+     * present, at least one INCLUDED must be present (if any are listed), and
+     * every EXCLUDED must be absent. */
+
+    /* Island surface biomes and their per-biome modes. */
     int surface[SCAN_MAX_LIST];
+    int surfaceMode[SCAN_MAX_LIST];
     int nSurface;
-    int matchAllSurface;
 
     /* Ocean biome ids that count as "ocean" for the isolation rings. Empty list
      * falls back to treating every ocean biome as ocean. */
     int ocean[SCAN_MAX_LIST];
     int nOcean;
 
-    /* Desired underground cave biomes. matchAllCave works like matchAllSurface;
-     * minCave is the minimum number of sample points that must hit a desired
-     * cave biome (in "any" mode) or each desired biome (in "all" mode). */
+    /* Underground cave biomes and their modes. minCave is the sample-count
+     * threshold at which a cave biome counts as "present" for required/included
+     * (an excluded cave is rejected on any presence at all). */
     int cave[SCAN_MAX_LIST];
+    int caveMode[SCAN_MAX_LIST];
     int nCave;
-    int matchAllCave;
     int minCave;
 
     /* Geometry. Radii in blocks; the rings scale with island size on the Go
@@ -60,13 +64,18 @@ typedef struct {
      * enclosure (any gap). Larger values dial in more isolation (rarer). */
     int minMoat;
 
-    /* Required structures: each listed cubiomes StructureType must have a
-     * viable instance within structRadius blocks of spawn. Empty = no
-     * requirement. */
+    /* Structures (cubiomes StructureType) and their modes. Presence = a viable
+     * instance within structRadius blocks of spawn. */
     int structures[SCAN_MAX_LIST];
+    int structMode[SCAN_MAX_LIST];
     int nStructures;
     int structRadius;
 } ScanConfig;
+
+/* Per-feature selection modes. */
+#define SEL_INCLUDED 0
+#define SEL_REQUIRED 1
+#define SEL_EXCLUDED 2
 
 /* What a single seed check gives back. */
 typedef struct {

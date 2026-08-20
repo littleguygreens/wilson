@@ -45,6 +45,18 @@
   }
   .chip.on { background: var(--chip-on); border-color: var(--accent); }
   .chip.disabled { opacity: .4; }
+  /* tri-state selection chips */
+  .chip.sel-inc { background: var(--chip-on); border-color: var(--accent); }
+  .chip.sel-inc::before { content: '＋ '; color: var(--accent); }
+  .chip.sel-req { background: #1e3d2a; border-color: var(--good); color: #cdefd7; }
+  .chip.sel-req::before { content: '★ '; color: var(--good); }
+  .chip.sel-exc { background: #3a2020; border-color: #ff6b6b; color: #f2c7c7; text-decoration: line-through; }
+  .chip.sel-exc::before { content: '✕ '; color: #ff6b6b; text-decoration: none; display: inline-block; }
+  .trilegend { font-size: 12px; color: var(--muted); margin-top: 8px; }
+  .trilegend .k { padding: 1px 4px; border-radius: 4px; }
+  .trilegend .k.inc { color: var(--accent); }
+  .trilegend .k.req { color: var(--good); }
+  .trilegend .k.exc { color: #ff6b6b; }
   .chip.preset { border-color: var(--accent); display: inline-flex; align-items: center; }
   .chip.preset .del { margin-left: 9px; color: var(--muted); font-weight: 700; padding: 0 2px; }
   .chip.preset .del:hover { color: #ff6b6b; }
@@ -137,13 +149,9 @@
     </div>
 
     <div class="group">
-      <div class="glabel">
-        <span>Island biomes <em id="surfCount">(0/3)</em></span>
-        <div class="toggle" id="surfaceMode">
-          <button data-v="0" class="on">Any</button><button data-v="1">All</button>
-        </div>
-      </div>
+      <div class="glabel"><span>Island biomes</span></div>
       <div id="surface" class="chips"></div>
+      <div class="trilegend">Tap to cycle: <span class="k off">off</span> → <span class="k inc">＋ include</span> → <span class="k req">★ require</span> → <span class="k exc">✕ exclude</span></div>
     </div>
 
     <div class="group">
@@ -153,16 +161,11 @@
     </div>
 
     <div class="group">
-      <div class="glabel">
-        <span>Cave biomes</span>
-        <div class="toggle" id="caveMode">
-          <button data-v="0" class="on">Any</button><button data-v="1">All</button>
-        </div>
-      </div>
+      <div class="glabel"><span>Cave biomes</span></div>
       <div id="cave" class="chips"></div>
       <div class="row2" id="minCaveWrap" style="margin-top:10px">
         <div class="field">
-          <label class="fl">Min cave samples</label>
+          <label class="fl">Min cave samples (for include/require)</label>
           <input id="minCave" type="number" inputmode="numeric" min="1" value="3">
         </div>
       </div>
@@ -171,7 +174,7 @@
     <div class="group">
       <div class="glabel"><span>Structures on island</span></div>
       <div id="reqStructs" class="chips"></div>
-      <div class="hint">Require each selected structure within the island. Stacking several is rare.</div>
+      <div class="trilegend">Tap to cycle: <span class="k off">off</span> → <span class="k inc">＋ include</span> → <span class="k req">★ require</span> → <span class="k exc">✕ exclude</span></div>
     </div>
 
     <div class="group">
@@ -248,7 +251,8 @@
 <script>
   const $ = (id) => document.getElementById(id);
   let es = null;
-  const state = { size: 'M', surfaceAll: 0, caveAll: 0, sizes: [], structs: [], showStructs: new Set(), caveView: false, caveY: -50 };
+  const state = { size: 'M', sizes: [], structs: [], showStructs: new Set(), caveView: false, caveY: -50,
+    surfSel: new Map(), caveSel: new Map(), structSel: new Map() };
 
   fetch('/api/biomes').then(r => r.json()).then(setup).catch(() => {
     $('empty').textContent = 'Could not load biome list (is the server running?).';
@@ -256,7 +260,6 @@
 
   function setup(d) {
     state.sizes = d.sizes;
-    state.maxSurface = d.maxSurface;
     // size segmented control
     const seg = $('sizes'); seg.innerHTML = '';
     d.sizes.forEach(s => {
@@ -267,15 +270,12 @@
       seg.appendChild(b);
     });
     updateSizeHint();
-    buildChips('surface', d.surface, d.maxSurface);
+    buildTriChips('surface', d.surface, state.surfSel);
     buildChips('ocean', d.ocean, 0);
-    buildChips('cave', d.cave, 0);
-    buildChips('reqStructs', d.structures, 0);
+    buildTriChips('cave', d.cave, state.caveSel);
+    buildTriChips('reqStructs', d.structures, state.structSel);
     state.structs = d.structures;
     buildShowStructs(d.structures);
-    $('surfCount').textContent = '(0/' + d.maxSurface + ')';
-    bindToggle('surfaceMode', v => state.surfaceAll = v);
-    bindToggle('caveMode', v => state.caveAll = v);
     $('stronghold').onchange = () => $('shWrap').classList.toggle('hidden', !$('stronghold').checked);
     $('shDist').oninput = () => $('shVal').textContent = $('shDist').value;
     $('moat').oninput = () => $('moatVal').textContent = ($('moat').value === '0') ? 'any' : fmt($('moat').value) + ' blocks';
@@ -296,9 +296,9 @@
     name: '⛰ Mountain Isle', builtin: true,
     cfg: {
       size: 'L',
-      surface: ['jagged_peaks', 'frozen_peaks', 'stony_peaks', 'snowy_slopes', 'windswept_hills'],
-      surfaceAll: 0, ocean: [], cave: ['lush_caves'], caveAll: 0, minCave: 3,
-      enclosed: 1, moat: 300, stronghold: 0, shDist: 1700, n: 5, workers: ''
+      surf: { jagged_peaks: 'inc', frozen_peaks: 'inc', stony_peaks: 'inc', snowy_slopes: 'inc', windswept_hills: 'inc' },
+      ocean: [], cave: { lush_caves: 'req' }, struct: {}, minCave: 3,
+      moat: 300, stronghold: 0, shDist: 1700, n: 5, workers: ''
     }
   }];
   const PRESET_KEY = 'wilson.presets';
@@ -348,11 +348,11 @@
   function captureConfig() {
     return {
       size: state.size,
-      surface: selected('surface'), surfaceAll: state.surfaceAll,
+      surf: objFromMap(state.surfSel),
       ocean: selected('ocean'),
-      cave: selected('cave'), caveAll: state.caveAll,
+      cave: objFromMap(state.caveSel),
+      struct: objFromMap(state.structSel),
       minCave: parseInt($('minCave').value, 10) || 3,
-      enclosed: 1,
       moat: parseInt($('moat').value, 10) || 0,
       stronghold: $('stronghold').checked ? 1 : 0,
       shDist: parseInt($('shDist').value, 10) || 1700,
@@ -361,11 +361,21 @@
     };
   }
 
+  // Accepts new tri-state presets ({surf:{key:'inc'}}), and migrates old ones
+  // that used an array + all/any flag.
+  function migrateSel(triObj, oldArr, oldAll) {
+    if (triObj) return mapFromObj(triObj);
+    const m = new Map();
+    (oldArr || []).forEach(k => m.set(k, oldAll ? 'req' : 'inc'));
+    return m;
+  }
+
   function applyPreset(p) {
     setSize(p.size || 'M');
-    setChips('surface', p.surface || []); state.surfaceAll = p.surfaceAll ? 1 : 0; markToggle('surfaceMode', state.surfaceAll);
+    state.surfSel = migrateSel(p.surf, p.surface, p.surfaceAll); paintTri('surface', state.surfSel);
+    state.caveSel = migrateSel(Array.isArray(p.cave) ? null : p.cave, Array.isArray(p.cave) ? p.cave : null, p.caveAll); paintTri('cave', state.caveSel);
+    state.structSel = migrateSel(p.struct, p.structures, false); paintTri('reqStructs', state.structSel);
     setChips('ocean', p.ocean || []);
-    setChips('cave', p.cave || []); state.caveAll = p.caveAll ? 1 : 0; markToggle('caveMode', state.caveAll);
     $('minCave').value = p.minCave || 3;
     $('moat').value = p.moat || 0; $('moat').oninput();
     $('stronghold').checked = !!p.stronghold; $('shWrap').classList.toggle('hidden', !$('stronghold').checked);
@@ -375,48 +385,63 @@
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
+  function setChips(cat, keys) {
+    const set = new Set(keys || []);
+    [...$(cat).children].forEach(c => c.classList.toggle('on', set.has(c.dataset.key)));
+  }
+
   function setSize(key) {
     state.size = key;
     [...$('sizes').children].forEach(c => c.classList.toggle('on', c.dataset.key === key));
     updateSizeHint();
   }
-  function setChips(cat, keys) {
-    const set = new Set(keys);
-    [...$(cat).children].forEach(c => c.classList.toggle('on', set.has(c.dataset.key)));
-    if (cat === 'surface') { $('surfCount').textContent = '(' + selected('surface').length + '/' + state.maxSurface + ')'; refreshSurfaceDisable(state.maxSurface); }
+  // Tri-state chips: each cycles off -> include -> require -> exclude -> off,
+  // storing the state in selMap (key -> 'inc'|'req'|'exc').
+  function buildTriChips(cat, opts, selMap) {
+    const box = $(cat); box.innerHTML = '';
+    opts.forEach(o => {
+      const c = document.createElement('span');
+      c.className = 'chip'; c.textContent = o.label; c.dataset.key = o.key;
+      c.onclick = () => {
+        const cur = selMap.get(o.key);
+        const next = cur === undefined ? 'inc' : cur === 'inc' ? 'req' : cur === 'req' ? 'exc' : undefined;
+        if (next) selMap.set(o.key, next); else selMap.delete(o.key);
+        applyTriClass(c, next);
+      };
+      applyTriClass(c, selMap.get(o.key));
+      box.appendChild(c);
+    });
   }
-  function markToggle(id, v) { [...$(id).children].forEach(b => b.classList.toggle('on', parseInt(b.dataset.v, 10) === v)); }
+  function applyTriClass(c, st) {
+    c.classList.remove('sel-inc', 'sel-req', 'sel-exc');
+    if (st) c.classList.add('sel-' + st);
+  }
+  // Re-paint chips in a container to match selMap (after loading a preset).
+  function paintTri(cat, selMap) {
+    [...$(cat).children].forEach(c => applyTriClass(c, selMap.get(c.dataset.key)));
+  }
+  // Split a selMap into { req, inc, exc } key lists for the query string.
+  function triParams(selMap) {
+    const r = { req: [], inc: [], exc: [] };
+    selMap.forEach((v, k) => { r[({ inc: 'inc', req: 'req', exc: 'exc' })[v]].push(k); });
+    return r;
+  }
+  function mapFromObj(o) { const m = new Map(); Object.entries(o || {}).forEach(([k, v]) => m.set(k, v)); return m; }
+  function objFromMap(m) { const o = {}; m.forEach((v, k) => o[k] = v); return o; }
 
   function updateSizeHint() {
     const s = state.sizes.find(x => x.key === state.size);
     $('sizeHint').textContent = s ? s.label + (s.key === 'XXL' ? ' — big enough to contain a stronghold' : '') : '';
   }
 
-  function buildChips(cat, opts, max) {
+  // Plain multi-select chips (used for the ocean-types list).
+  function buildChips(cat, opts) {
     const box = $(cat); box.innerHTML = '';
     opts.forEach(o => {
       const c = document.createElement('span');
       c.className = 'chip'; c.textContent = o.label; c.dataset.key = o.key;
-      c.onclick = () => {
-        if (!c.classList.contains('on') && max > 0 && selected(cat).length >= max) return;
-        c.classList.toggle('on');
-        if (cat === 'surface') $('surfCount').textContent = '(' + selected('surface').length + '/' + max + ')';
-        if (cat === 'surface') refreshSurfaceDisable(max);
-      };
+      c.onclick = () => c.classList.toggle('on');
       box.appendChild(c);
-    });
-  }
-
-  function refreshSurfaceDisable(max) {
-    const full = selected('surface').length >= max;
-    [...$('surface').children].forEach(c => c.classList.toggle('disabled', full && !c.classList.contains('on')));
-  }
-
-  function bindToggle(id, cb) {
-    const t = $(id);
-    [...t.children].forEach(b => b.onclick = () => {
-      [...t.children].forEach(x => x.classList.toggle('on', x === b));
-      cb(parseInt(b.dataset.v, 10));
     });
   }
 
@@ -433,19 +458,22 @@
     const wRaw = parseInt($('workers').value, 10);
     const p = new URLSearchParams({
       size: state.size,
-      surface: selected('surface').join(','),
-      surfaceAll: state.surfaceAll,
       ocean: selected('ocean').join(','),
-      cave: selected('cave').join(','),
-      caveAll: state.caveAll,
       minCave: Math.max(1, parseInt($('minCave').value, 10) || 3),
       n: Math.max(1, parseInt($('n').value, 10) || 5),
       workers: (Number.isFinite(wRaw) && wRaw > 0) ? wRaw : 0,
     });
+    const setTri = (prefix, selMap) => {
+      const t = triParams(selMap);
+      if (t.req.length) p.set(prefix + 'Req', t.req.join(','));
+      if (t.inc.length) p.set(prefix + 'Inc', t.inc.join(','));
+      if (t.exc.length) p.set(prefix + 'Exc', t.exc.join(','));
+    };
+    setTri('surface', state.surfSel);
+    setTri('cave', state.caveSel);
+    setTri('struct', state.structSel);
     if ($('stronghold').checked) { p.set('stronghold', '1'); p.set('shDist', $('shDist').value); }
     if ($('moat').value !== '0') p.set('moat', $('moat').value);
-    const reqS = selected('reqStructs');
-    if (reqS.length) p.set('structures', reqS.join(','));
 
     $('results').innerHTML = '';
     $('empty').classList.add('hidden');

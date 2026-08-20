@@ -54,12 +54,12 @@ type hit struct {
 // ScanConfig by toCConfig; keeping it Go-only lets server.go build searches
 // without touching cgo.
 type Config struct {
-	Surface         []int32
-	MatchAllSurface bool
-	Ocean           []int32
-	Cave            []int32
-	MatchAllCave    bool
-	MinCave         int
+	Surface     []int32
+	SurfaceMode []int32
+	Ocean       []int32
+	Cave        []int32
+	CaveMode    []int32
+	MinCave     int
 
 	IslandRadius   int
 	GridStep       int
@@ -81,6 +81,7 @@ type Config struct {
 	MinMoat         int
 
 	Structures   []int32
+	StructMode   []int32
 	StructRadius int
 
 	MapStep int // rendering zoom; not part of the C filter
@@ -212,10 +213,10 @@ func toCConfig(cfg Config) C.ScanConfig {
 		return C.int(n)
 	}
 	c.nSurface = putList(&c.surface, cfg.Surface)
+	putList(&c.surfaceMode, cfg.SurfaceMode)
 	c.nOcean = putList(&c.ocean, cfg.Ocean)
 	c.nCave = putList(&c.cave, cfg.Cave)
-	c.matchAllSurface = boolToC(cfg.MatchAllSurface)
-	c.matchAllCave = boolToC(cfg.MatchAllCave)
+	putList(&c.caveMode, cfg.CaveMode)
 	c.minCave = C.int(cfg.MinCave)
 
 	c.islandRadius = C.int(cfg.IslandRadius)
@@ -238,9 +239,17 @@ func toCConfig(cfg Config) C.ScanConfig {
 	c.minMoat = C.int(cfg.MinMoat)
 
 	c.nStructures = putList(&c.structures, cfg.Structures)
+	putList(&c.structMode, cfg.StructMode)
 	c.structRadius = C.int(cfg.StructRadius)
 	return c
 }
+
+// Selection modes, mirrored from scan.h (SEL_INCLUDED/REQUIRED/EXCLUDED).
+const (
+	selIncluded int32 = 0
+	selRequired int32 = 1
+	selExcluded int32 = 2
+)
 
 func boolToC(b bool) C.int {
 	if b {
@@ -310,12 +319,20 @@ func defaultConfig() Config {
 
 	cfg := geometryForSize("M")
 	cfg.Surface = peaks
-	cfg.MatchAllSurface = false
+	cfg.SurfaceMode = repeatMode(selIncluded, len(peaks)) // any peak
 	cfg.Cave = []int32{lush}
-	cfg.MatchAllCave = false
+	cfg.CaveMode = []int32{selRequired} // require lush caves
 	cfg.MinCave = 3
 	cfg.RequireEnclosed = true
 	return cfg
+}
+
+func repeatMode(mode int32, n int) []int32 {
+	out := make([]int32, n)
+	for i := range out {
+		out[i] = mode
+	}
+	return out
 }
 
 // runCheck diagnoses one seed against a size preset (enclosure on) and prints
