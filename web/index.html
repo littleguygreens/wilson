@@ -255,7 +255,7 @@
         <label class="btn2" style="cursor:pointer">⭱ Import<input id="importFile" type="file" accept="application/json,.json" hidden></label>
       </div>
     </div>
-    <div class="hint savedbar-note">Saved in this browser. Export to back up or move between machines.</div>
+    <div class="hint savedbar-note">Saved in this browser. Export writes your whole library to one <code>wilson-seeds.json</code> — overwrite that file to keep it current.</div>
     <div id="savedResults"></div>
     <div id="savedEmpty" class="empty">No saved seeds yet — tap ☆ Save on a result to keep it here.</div>
   </div>
@@ -668,7 +668,7 @@
     const blob = new Blob([JSON.stringify({ app: 'wilson', version: 1, seeds: a }, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.href = url; link.download = 'wilson-seeds-' + new Date().toISOString().slice(0, 10) + '.json';
+    link.href = url; link.download = 'wilson-seeds.json';
     document.body.appendChild(link); link.click(); link.remove();
     URL.revokeObjectURL(url);
   }
