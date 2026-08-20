@@ -29,6 +29,15 @@
   .tabs button.on { background: var(--chip-on); border-color: var(--accent); color: var(--text); }
   .cardbtns { display: flex; gap: 7px; flex: none; }
   .savedbtns { display: flex; gap: 8px; }
+  .savedbar { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+  .savedbar-title { font-size: 15px; color: var(--text); }
+  .savedbar-title b { font-variant-numeric: tabular-nums; }
+  .savedbar .savedbtns { margin-left: auto; }
+  .savedbar .btn2 { flex: 0 0 auto; padding: 9px 15px; }
+  .savedbar-note { margin: 0 2px 14px; }
+  .savedfoot { margin-top: 10px; }
+  .savedwhen { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+  .savedfoot .note { margin-top: 0; }
   .btn2 { flex: 1; text-align: center; background: var(--panel-2); border: 1px solid var(--line); color: var(--text); border-radius: 10px; padding: 11px; font-size: 14px; font-weight: 600; cursor: pointer; }
   .btn2:active { background: var(--chip-on); }
   .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin-bottom: 12px; }
@@ -239,13 +248,14 @@
   </div><!-- /searchView -->
 
   <div id="savedView" class="hidden">
-    <div class="panel">
-      <div class="hint" style="margin-bottom:10px">Saved seeds are stored in this browser. Export a file to keep a portable record or move it between machines; import one to reopen your finds with full maps, overlays and tooltips.</div>
+    <div class="savedbar">
+      <div class="savedbar-title"><b id="savedTitle">0</b> saved</div>
       <div class="savedbtns">
-        <button class="btn2" onclick="exportSaved()">⭳ Export JSON</button>
-        <label class="btn2" style="cursor:pointer">⭱ Import JSON<input id="importFile" type="file" accept="application/json,.json" hidden></label>
+        <button class="btn2" onclick="exportSaved()">⭳ Export</button>
+        <label class="btn2" style="cursor:pointer">⭱ Import<input id="importFile" type="file" accept="application/json,.json" hidden></label>
       </div>
     </div>
+    <div class="hint savedbar-note">Saved in this browser. Export to back up or move between machines.</div>
     <div id="savedResults"></div>
     <div id="savedEmpty" class="empty">No saved seeds yet — tap ☆ Save on a result to keep it here.</div>
   </div>
@@ -589,11 +599,20 @@
 
     card.append(top, meta, wrap, legend);
     if (isSaved) {
+      const foot = document.createElement('div'); foot.className = 'savedfoot';
+      if (m.savedAt) {
+        const when = document.createElement('div'); when.className = 'savedwhen';
+        when.textContent = 'saved ' + new Date(m.savedAt).toLocaleDateString();
+        foot.appendChild(when);
+      }
       const note = document.createElement('textarea');
-      note.className = 'note'; note.rows = 2; note.placeholder = 'Add a note…';
+      note.className = 'note'; note.rows = 1; note.placeholder = 'Add a note…';
       note.value = m.note || '';
-      note.oninput = () => updateSavedNote(m.seed, note.value);
-      card.append(note);
+      const grow = () => { note.style.height = 'auto'; note.style.height = note.scrollHeight + 'px'; };
+      note.oninput = () => { updateSavedNote(m.seed, note.value); grow(); };
+      foot.appendChild(note);
+      card.append(foot);
+      requestAnimationFrame(grow);
     }
     if (state.showStructs.size) ensureStructs(wrap, () => renderMarkers(wrap));
     return card;
@@ -610,7 +629,12 @@
   function loadSaved() { try { return JSON.parse(localStorage.getItem(SAVED_KEY) || '[]'); } catch (_) { return []; } }
   function persistSaved(a) { try { localStorage.setItem(SAVED_KEY, JSON.stringify(a)); } catch (_) {} }
   function isSavedSeed(seed) { return loadSaved().some((x) => String(x.seed) === String(seed)); }
-  function updateSavedUI() { $('savedCount').textContent = '(' + loadSaved().length + ')'; }
+  function updateSavedUI() {
+    const n = loadSaved().length;
+    $('savedCount').textContent = '(' + n + ')';
+    const title = $('savedTitle');
+    if (title) title.textContent = n;
+  }
 
   function toggleSave(m, btn) {
     const a = loadSaved();
