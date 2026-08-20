@@ -155,9 +155,9 @@
     </div>
 
     <div class="group">
-      <div class="glabel"><span>Allowed ocean types</span></div>
+      <div class="glabel"><span>Ocean types</span></div>
       <div id="ocean" class="chips"></div>
-      <div class="hint">None selected = any ocean counts.</div>
+      <div class="hint"><span style="color:var(--accent)">＋ include</span> = counts as the surrounding sea (none = any ocean). <span style="color:var(--good)">★ require</span> = must appear on the outer ring. <span style="color:#ff6b6b">✕ exclude</span> = must not appear on it.</div>
     </div>
 
     <div class="group">
@@ -252,7 +252,7 @@
   const $ = (id) => document.getElementById(id);
   let es = null;
   const state = { size: 'M', sizes: [], structs: [], showStructs: new Set(), caveView: false, caveY: -50,
-    surfSel: new Map(), caveSel: new Map(), structSel: new Map() };
+    surfSel: new Map(), oceanSel: new Map(), caveSel: new Map(), structSel: new Map() };
 
   fetch('/api/biomes').then(r => r.json()).then(setup).catch(() => {
     $('empty').textContent = 'Could not load biome list (is the server running?).';
@@ -271,7 +271,7 @@
     });
     updateSizeHint();
     buildTriChips('surface', d.surface, state.surfSel);
-    buildChips('ocean', d.ocean, 0);
+    buildTriChips('ocean', d.ocean, state.oceanSel);
     buildTriChips('cave', d.cave, state.caveSel);
     buildTriChips('reqStructs', d.structures, state.structSel);
     state.structs = d.structures;
@@ -297,7 +297,7 @@
     cfg: {
       size: 'L',
       surf: { jagged_peaks: 'inc', frozen_peaks: 'inc', stony_peaks: 'inc', snowy_slopes: 'inc', windswept_hills: 'inc' },
-      ocean: [], cave: { lush_caves: 'req' }, struct: {}, minCave: 3,
+      ocean: {}, cave: { lush_caves: 'req' }, struct: {}, minCave: 3,
       moat: 300, stronghold: 0, shDist: 1700, n: 5, workers: ''
     }
   }];
@@ -349,7 +349,7 @@
     return {
       size: state.size,
       surf: objFromMap(state.surfSel),
-      ocean: selected('ocean'),
+      ocean: objFromMap(state.oceanSel),
       cave: objFromMap(state.caveSel),
       struct: objFromMap(state.structSel),
       minCave: parseInt($('minCave').value, 10) || 3,
@@ -375,7 +375,7 @@
     state.surfSel = migrateSel(p.surf, p.surface, p.surfaceAll); paintTri('surface', state.surfSel);
     state.caveSel = migrateSel(Array.isArray(p.cave) ? null : p.cave, Array.isArray(p.cave) ? p.cave : null, p.caveAll); paintTri('cave', state.caveSel);
     state.structSel = migrateSel(p.struct, p.structures, false); paintTri('reqStructs', state.structSel);
-    setChips('ocean', p.ocean || []);
+    state.oceanSel = migrateSel(Array.isArray(p.ocean) ? null : p.ocean, Array.isArray(p.ocean) ? p.ocean : null, false); paintTri('ocean', state.oceanSel);
     $('minCave').value = p.minCave || 3;
     $('moat').value = p.moat || 0; $('moat').oninput();
     $('stronghold').checked = !!p.stronghold; $('shWrap').classList.toggle('hidden', !$('stronghold').checked);
@@ -470,6 +470,7 @@
       if (t.exc.length) p.set(prefix + 'Exc', t.exc.join(','));
     };
     setTri('surface', state.surfSel);
+    setTri('ocean', state.oceanSel);
     setTri('cave', state.caveSel);
     setTri('struct', state.structSel);
     if ($('stronghold').checked) { p.set('stronghold', '1'); p.set('shDist', $('shDist').value); }

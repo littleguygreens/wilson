@@ -34,8 +34,10 @@ parameters:
   appear), or **exclude** (must not appear).
 - **Presets** — one built-in "Mountain Isle" search, plus up to 3 of your own
   saved in the browser (localStorage). Tap to load a full configuration.
-- **Allowed ocean types** — which ocean biomes count as the isolating sea
-  (none selected = any ocean).
+- **Ocean types** — tri-state for the surrounding sea: **include** = counts as
+  the isolating ocean (none = any ocean), **require** = must appear on the outer
+  ring, **exclude** = must not appear on it (e.g. no frozen ocean around a warm
+  island).
 - **Cave biomes** — same include / require / exclude tri-state as surface
   biomes; a cave counts as present at the minimum-sample threshold.
 - **Structures on island** — include / require / exclude for each structure

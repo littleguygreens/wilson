@@ -21,9 +21,11 @@ typedef struct {
     int surfaceMode[SCAN_MAX_LIST];
     int nSurface;
 
-    /* Ocean biome ids that count as "ocean" for the isolation rings. Empty list
-     * falls back to treating every ocean biome as ocean. */
+    /* Ocean biomes and their modes. INCLUDED types are the allowed ring
+     * "material" (with none included, any ocean counts). REQUIRED types must
+     * appear on the outer ring; EXCLUDED types must not. */
     int ocean[SCAN_MAX_LIST];
+    int oceanMode[SCAN_MAX_LIST];
     int nOcean;
 
     /* Underground cave biomes and their modes. minCave is the sample-count

@@ -57,6 +57,7 @@ type Config struct {
 	Surface     []int32
 	SurfaceMode []int32
 	Ocean       []int32
+	OceanMode   []int32
 	Cave        []int32
 	CaveMode    []int32
 	MinCave     int
@@ -215,6 +216,7 @@ func toCConfig(cfg Config) C.ScanConfig {
 	c.nSurface = putList(&c.surface, cfg.Surface)
 	putList(&c.surfaceMode, cfg.SurfaceMode)
 	c.nOcean = putList(&c.ocean, cfg.Ocean)
+	putList(&c.oceanMode, cfg.OceanMode)
 	c.nCave = putList(&c.cave, cfg.Cave)
 	putList(&c.caveMode, cfg.CaveMode)
 	c.minCave = C.int(cfg.MinCave)

@@ -238,7 +238,7 @@ func configFromQuery(r *http.Request) Config {
 	cfg := geometryForSize(q.Get("size"))
 
 	cfg.Surface, cfg.SurfaceMode = triSelection(q.Get("surfaceReq"), q.Get("surfaceInc"), q.Get("surfaceExc"), biomeKeyToID)
-	cfg.Ocean = keysToIDs(q.Get("ocean"), 0)
+	cfg.Ocean, cfg.OceanMode = triSelection(q.Get("oceanReq"), q.Get("oceanInc"), q.Get("oceanExc"), biomeKeyToID)
 	cfg.Cave, cfg.CaveMode = triSelection(q.Get("caveReq"), q.Get("caveInc"), q.Get("caveExc"), biomeKeyToID)
 	cfg.MinCave = queryInt(r, "minCave", defaultMinCav)
 	if cfg.MinCave < 1 {

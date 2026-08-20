@@ -44,12 +44,51 @@ static int is_ocean(int id)
     }
 }
 
-/* Whether a biome counts as ocean for the isolation rings. With no ocean types
- * chosen, any ocean qualifies; otherwise only the chosen ones do. */
+/* Whether a biome counts as ocean "material" for the isolation rings. INCLUDED
+ * ocean types are the allowed material; if none are included, any ocean counts. */
 static int is_ring_ocean(const ScanConfig *cfg, int id)
 {
-    if (cfg->nOcean == 0) return is_ocean(id);
-    return in_list(id, cfg->ocean, cfg->nOcean);
+    int anyIncluded = 0;
+    for (int i = 0; i < cfg->nOcean; i++) {
+        if (cfg->oceanMode[i] == SEL_INCLUDED) {
+            anyIncluded = 1;
+            if (cfg->ocean[i] == id) return 1;
+        }
+    }
+    if (anyIncluded) return 0;
+    return is_ocean(id);
+}
+
+/* Checks REQUIRED/EXCLUDED ocean constraints against the outer ring: every
+ * required ocean type must appear on it, and no excluded type may. Returns 1 if
+ * satisfied (or if there are no such constraints). */
+static int outer_ocean_constraints(Generator *g, const ScanConfig *cfg)
+{
+    int hasReq = 0, hasExc = 0;
+    for (int i = 0; i < cfg->nOcean; i++) {
+        if (cfg->oceanMode[i] == SEL_REQUIRED) hasReq = 1;
+        else if (cfg->oceanMode[i] == SEL_EXCLUDED) hasExc = 1;
+    }
+    if ((!hasReq && !hasExc) || cfg->outerSamples <= 0)
+        return 1;
+
+    int reqSeen[SCAN_MAX_LIST];
+    memset(reqSeen, 0, sizeof(reqSeen));
+    for (int k = 0; k < cfg->outerSamples; k++) {
+        double a = 2.0 * M_PI * k / cfg->outerSamples;
+        int x = (int)(cos(a) * cfg->outerRadius);
+        int z = (int)(sin(a) * cfg->outerRadius);
+        int b = biome_at_block(g, x, SURFACE_Y, z);
+        for (int i = 0; i < cfg->nOcean; i++) {
+            if (cfg->ocean[i] != b) continue;
+            if (cfg->oceanMode[i] == SEL_EXCLUDED) return 0;
+            if (cfg->oceanMode[i] == SEL_REQUIRED) reqSeen[i] = 1;
+        }
+    }
+    for (int i = 0; i < cfg->nOcean; i++)
+        if (cfg->oceanMode[i] == SEL_REQUIRED && !reqSeen[i])
+            return 0;
+    return 1;
 }
 
 /* Counts how many of `samples` points on a circle of `radius` are ring-ocean. */
@@ -230,6 +269,10 @@ ScanResult scanner_check(void *s, uint64_t seed, const ScanConfig *cfg)
     /* 3. Outer isolation ring, if enabled. */
     if (cfg->outerSamples > 0 &&
         ocean_ring(g, cfg, cfg->outerRadius, cfg->outerSamples) < cfg->outerMinOcean)
+        return r;
+
+    /* 3b. Required/excluded ocean types on the outer ring. */
+    if (!outer_ocean_constraints(g, cfg))
         return r;
 
     /* 4. One pass over the island footprint, gathering which desired surface
