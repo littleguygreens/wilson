@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"math"
@@ -12,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 )
 
@@ -406,9 +409,18 @@ func mapHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "image/png")
 	w.Header().Set("Cache-Control", "public, max-age=3600")
-	if err := renderPNG(w, uint64(seed), step, y, spawn, sh); err != nil {
+	if err := renderPNG(w, uint64(seed), step, y, spawn, sh); err != nil && !isClientGone(err) {
 		log.Printf("render map for seed %d: %v", seed, err)
 	}
+}
+
+// isClientGone reports whether an error is just the client closing the
+// connection mid-response (navigated away, card removed, page reloaded). Those
+// are normal for on-demand map images and not worth logging as failures.
+func isClientGone(err error) bool {
+	return errors.Is(err, syscall.EPIPE) ||
+		errors.Is(err, syscall.ECONNRESET) ||
+		errors.Is(err, context.Canceled)
 }
 
 // biomeHandler returns the biome id and name at a block coordinate, for the
