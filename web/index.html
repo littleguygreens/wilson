@@ -242,6 +242,15 @@
 
     <button id="go" class="btn" onclick="start()">Scan</button>
     <button id="stop" class="btn stop hidden" onclick="stop()">Stop</button>
+
+    <div class="group" style="margin-top:14px">
+      <div class="glabel"><span>View a specific seed</span></div>
+      <div class="row2">
+        <div class="field" style="flex:1"><input id="viewSeed" type="text" inputmode="numeric" placeholder="paste a seed number"></div>
+        <button id="viewBtn" class="btn2" onclick="viewSeed()">View</button>
+      </div>
+      <div class="hint">Opens any known seed as a card at the current size, honouring the 26.3 toggle. Hover the map to read coordinates and biome.</div>
+    </div>
   </div>
 
   <div class="status">
@@ -561,6 +570,26 @@
     m.exp263 = state.exp263; // remember the mode this find was made in
     $('found').textContent = String((parseInt($('found').textContent, 10) || 0) + 1);
     $('results').prepend(makeCard(m, false));
+  }
+
+  // viewSeed opens one explicit seed as a card (no scan), at the current size and
+  // 26.3 toggle. Useful for inspecting a seed you already know.
+  function viewSeed() {
+    const raw = ($('viewSeed').value || '').trim();
+    if (!/^-?\d+$/.test(raw)) { alert('Enter a numeric seed.'); return; }
+    const p = new URLSearchParams({ seed: raw, size: state.size });
+    if (state.exp263) p.set('exp263', '1');
+    if ($('moat').value !== '0') p.set('moat', $('moat').value);
+    const btn = $('viewBtn'); btn.disabled = true; btn.textContent = '…';
+    fetch('/api/inspect?' + p.toString())
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(m => {
+        m.exp263 = state.exp263;
+        $('empty').classList.add('hidden');
+        $('results').prepend(makeCard(m, false));
+      })
+      .catch(() => alert('Could not load that seed.'))
+      .finally(() => { btn.disabled = false; btn.textContent = 'View'; });
   }
 
   // makeCard builds a result card from a match record. Because the map, overlays

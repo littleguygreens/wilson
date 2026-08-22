@@ -475,6 +475,22 @@ func search(ctx context.Context, hits chan<- hit, tested *int64, cCfg *C.ScanCon
 	}
 }
 
+// inspectSeed reports one seed's spawn and island metrics without filtering, for
+// the "view a seed" feature. cfg supplies the size geometry (window/step/zoom).
+func inspectSeed(seed uint64, cfg Config) hit {
+	s := C.scanner_new()
+	defer C.scanner_free(s)
+	cc := toCConfig(cfg)
+	r := C.scanner_inspect(s, C.uint64_t(seed), &cc)
+	return hit{
+		seed:        seed,
+		spawnX:      int(r.spawnX),
+		spawnZ:      int(r.spawnZ),
+		islandCells: int(r.islandCells),
+		moatBlocks:  int(r.moatBlocks),
+	}
+}
+
 // palette pulls cubiomes' own biome colours across once, cached for reuse.
 var (
 	paletteOnce sync.Once

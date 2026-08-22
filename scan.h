@@ -106,6 +106,10 @@ void        scanner_free(void *s);
 
 ScanResult  scanner_check(void *s, uint64_t seed, const ScanConfig *cfg);
 
+/* Like scanner_check but never filters: reports spawn and island metrics for any
+ * seed, for the "view a seed" feature. */
+ScanResult  scanner_inspect(void *s, uint64_t seed, const ScanConfig *cfg);
+
 /* Biome id at a single block coordinate (for the hover tooltip). exp263 enables
  * the experimental 26.3 Dappled Forest relabel. */
 int         scanner_biome(void *s, uint64_t seed, int x, int y, int z, int exp263);

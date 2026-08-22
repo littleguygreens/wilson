@@ -109,6 +109,7 @@ func runServer(addr string) error {
 	mux.HandleFunc("/", indexHandler)
 	mux.HandleFunc("/api/biomes", biomesHandler)
 	mux.HandleFunc("/api/scan", scanHandler)
+	mux.HandleFunc("/api/inspect", inspectHandler)
 	mux.HandleFunc("/api/map", mapHandler)
 	mux.HandleFunc("/api/biome", biomeHandler)
 	mux.HandleFunc("/api/structures", structuresHandler)
@@ -390,6 +391,28 @@ func scanHandler(w http.ResponseWriter, r *http.Request) {
 	sw.send("done", map[string]int64{
 		"tested": atomic.LoadInt64(&tested),
 		"found":  int64(found),
+	})
+}
+
+// inspectHandler returns a matchDTO for one explicit seed (no filtering), so the
+// UI can open any known seed as an interactive card. Honours size + exp263.
+func inspectHandler(w http.ResponseWriter, r *http.Request) {
+	seed, err := strconv.ParseInt(r.URL.Query().Get("seed"), 10, 64)
+	if err != nil {
+		http.Error(w, "bad seed", http.StatusBadRequest)
+		return
+	}
+	cfg := configFromQuery(r)
+	h := inspectSeed(uint64(seed), cfg)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(matchDTO{
+		Seed:         strconv.FormatInt(int64(h.seed), 10),
+		SpawnX:       h.spawnX,
+		SpawnZ:       h.spawnZ,
+		Step:         cfg.MapStep,
+		IslandBlocks: int64(h.islandCells) * int64(cfg.IslandStep) * int64(cfg.IslandStep),
+		Enclosed:     cfg.RequireEnclosed,
+		Moat:         h.moatBlocks,
 	})
 }
 

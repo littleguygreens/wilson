@@ -511,6 +511,30 @@ ScanResult scanner_check(void *s, uint64_t seed, const ScanConfig *cfg)
     return r;
 }
 
+/* scanner_inspect reports one seed's spawn and (if enclosure params are set) its
+ * spawn-island metrics, WITHOUT applying any filters. Used by the "view a seed"
+ * feature so any known seed can be opened as a card. */
+ScanResult scanner_inspect(void *s, uint64_t seed, const ScanConfig *cfg)
+{
+    Generator *g = (Generator *)s;
+    ScanResult r;
+    memset(&r, 0, sizeof(r));
+    applySeed(g, DIM_OVERWORLD, seed);
+
+    Pos p = getSpawn(g);
+    r.spawnX = p.x;
+    r.spawnZ = p.z;
+
+    if (cfg->requireEnclosed && cfg->islandWindow > 0 && cfg->islandStep > 0) {
+        int complete, cells, moat;
+        island_metrics(g, cfg->islandWindow, cfg->islandStep, &complete, &cells, &moat);
+        r.islandCells = cells;
+        r.moatBlocks = moat;
+    }
+    r.match = 1;
+    return r;
+}
+
 int scanner_biome(void *s, uint64_t seed, int x, int y, int z, int exp263)
 {
     Generator *g = (Generator *)s;
