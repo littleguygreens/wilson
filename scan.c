@@ -47,8 +47,8 @@ static int is_ocean(int id)
 /* Applies the ocean-type tri-state over the whole surrounding sea. Oceans use a
  * whitelist rule, not the "at least one" rule the land biomes use: the sea is
  * entirely ocean, so the point is to constrain *which* ocean types may make it
- * up. If any type is INCLUDED, the sea may contain only INCLUDED or REQUIRED
- * types -- any other ocean type (e.g. frozen you left out) rejects the seed.
+ * up. If any type is listed as INCLUDED or REQUIRED, that set is the allowed
+ * palette -- any other ocean type (e.g. frozen you left out) rejects the seed.
  * EXCLUDED types reject on any presence (useful when nothing is included), and
  * every REQUIRED type must actually appear. With no ocean modes set, anything
  * goes. Isolation geometry is separate (any ocean isolates); this is type only.
@@ -58,9 +58,12 @@ static int ocean_area_constraints(Generator *g, const ScanConfig *cfg)
     if (cfg->nOcean <= 0)
         return 1;
 
-    int anyIncluded = 0;
+    /* The allowed palette is every type marked INCLUDED or REQUIRED. Both narrow
+     * the sea to that set, so "all but frozen" keeps frozen out whether you tap
+     * those chips to include or to require. */
+    int hasAllowed = 0;
     for (int i = 0; i < cfg->nOcean; i++)
-        if (cfg->oceanMode[i] == SEL_INCLUDED) { anyIncluded = 1; break; }
+        if (cfg->oceanMode[i] == SEL_INCLUDED || cfg->oceanMode[i] == SEL_REQUIRED) { hasAllowed = 1; break; }
 
     /* Sample the same window the enclosure check uses -- the visible sea around
      * the island. Fall back to the outer isolation radius if it is unset. */
@@ -83,8 +86,8 @@ static int ocean_area_constraints(Generator *g, const ScanConfig *cfg)
 
             if (mode == SEL_EXCLUDED)
                 return 0;                       /* an excluded type is present */
-            if (anyIncluded && mode != SEL_INCLUDED && mode != SEL_REQUIRED)
-                return 0;                       /* off the whitelist */
+            if (hasAllowed && mode != SEL_INCLUDED && mode != SEL_REQUIRED)
+                return 0;                       /* off the whitelist palette */
             if (mode == SEL_REQUIRED)
                 reqSeen[idx] = 1;
         }

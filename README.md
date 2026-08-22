@@ -37,12 +37,12 @@ parameters:
 - **Ocean types** — tri-state for the surrounding sea, checked across the whole
   visible sea (not just a ring). Unlike the land biomes, oceans use a
   **whitelist**: since the sea is entirely ocean, the point is which ocean types
-  may make it up. **include** = if you include any types, the sea may contain
-  *only* those (plus any required) — so including everything but frozen keeps
-  frozen out with no extra step. **require** = this type must appear (and is
-  allowed). **exclude** = this type must not appear anywhere in view (handy when
-  you haven't included anything). Isolation itself is separate — any ocean counts
-  as the water that isolates the island.
+  may make it up. Any type set to **include** or **require** forms the allowed
+  palette — the sea may contain *only* those, so marking everything but frozen
+  (as either) keeps frozen out with no extra step. **require** additionally means
+  that type must actually appear. **exclude** = this type must not appear anywhere
+  in view (handy when you haven't listed anything to include). Isolation itself is
+  separate — any ocean counts as the water that isolates the island.
 - **Cave biomes** — same include / require / exclude tri-state as surface
   biomes; a cave counts as present at the minimum-sample threshold.
 - **Structures on island** — include / require / exclude for each structure
