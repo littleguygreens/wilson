@@ -234,6 +234,80 @@ static void island_metrics(Generator *g, int window, int step,
     free(cstk);
 }
 
+/* One pass over the island footprint at gridStep resolution. Counts land over
+ * the whole circle for the size floor, then flood-fills the spawn-connected land
+ * from the centre and gathers surface/cave biome presence ONLY over that
+ * component. That way the biome requirements judge the actual spawn island, not
+ * a separate islet that merely falls within the search radius. Uses the same
+ * grid spacing as before, so caveHits (and the minCave threshold) keep their
+ * meaning. Returns 0 only on allocation failure. */
+static int gather_island(Generator *g, const ScanConfig *cfg,
+                         unsigned *surfaceSeen, int *caveHits, int *caveTotal,
+                         int *landCount, int *sampleCount)
+{
+    *surfaceSeen = 0;
+    memset(caveHits, 0, sizeof(int) * SCAN_MAX_LIST);
+    *caveTotal = 0;
+    *landCount = 0;
+    *sampleCount = 0;
+
+    int R = cfg->islandRadius;
+    int step = cfg->gridStep > 0 ? cfg->gridStep : 16;
+    if (R <= 0 || step <= 0)
+        return 1;
+
+    int n = 2 * (R / step) + 1;         /* odd, centre cell is block (0,0) */
+    int c = n / 2;
+    unsigned char *land = malloc((size_t)n * n);
+    int *stk = malloc(sizeof(int) * (size_t)n * n);
+    if (!land || !stk) { free(land); free(stk); return 0; }
+
+    for (int j = 0; j < n; j++)
+        for (int i = 0; i < n; i++) {
+            int bx = (i - c) * step, bz = (j - c) * step;
+            land[j * n + i] = is_ocean(biome_at_block(g, bx, SURFACE_Y, bz)) ? 0 : 1;
+        }
+
+    /* Land fraction over the circular footprint -- the landmass size floor. This
+     * still counts every landmass in view, matching the earlier behaviour. */
+    for (int j = 0; j < n; j++)
+        for (int i = 0; i < n; i++) {
+            int bx = (i - c) * step, bz = (j - c) * step;
+            if (bx * bx + bz * bz > R * R)
+                continue;
+            (*sampleCount)++;
+            if (land[j * n + i]) (*landCount)++;
+        }
+
+    /* Flood-fill the spawn island (its centre is land by an earlier check). */
+    if (land[c * n + c] == 1) {
+        int edge = 0;
+        classify_component(land, n, c * n + c, 2, &edge, stk);
+    }
+
+    /* Gather biome membership over the spawn island's cells only. */
+    for (int j = 0; j < n; j++)
+        for (int i = 0; i < n; i++) {
+            if (land[j * n + i] != 2)
+                continue;
+            int bx = (i - c) * step, bz = (j - c) * step;
+            if (bx * bx + bz * bz > R * R)
+                continue;
+            int surf = biome_at_block(g, bx, SURFACE_Y, bz);
+            for (int k = 0; k < cfg->nSurface; k++)
+                if (cfg->surface[k] == surf) *surfaceSeen |= (1u << k);
+            if (cfg->nCave > 0) {
+                int cav = biome_at_block(g, bx, CAVE_Y, bz);
+                for (int k = 0; k < cfg->nCave; k++)
+                    if (cfg->cave[k] == cav) { caveHits[k]++; (*caveTotal)++; }
+            }
+        }
+
+    free(land);
+    free(stk);
+    return 1;
+}
+
 /* ---- lifecycle ------------------------------------------------------- */
 
 void *scanner_new(void)
@@ -282,35 +356,16 @@ ScanResult scanner_check(void *s, uint64_t seed, const ScanConfig *cfg)
     if (!ocean_area_constraints(g, cfg))
         return r;
 
-    /* 4. One pass over the island footprint, gathering which desired surface
-     *    biomes appear and how many sample points hit each desired cave biome. */
+    /* 4. Flood-fill the spawn island and gather which desired surface biomes
+     *    appear on it, and how many sample points hit each desired cave biome --
+     *    all restricted to the spawn-connected land, not other nearby islets. */
     unsigned surfaceSeen = 0;                 /* bit i = cfg->surface[i] seen */
     int caveHits[SCAN_MAX_LIST];
-    memset(caveHits, 0, sizeof(caveHits));
     int caveTotal = 0;
     int landCount = 0, sampleCount = 0;
-    int step = cfg->gridStep > 0 ? cfg->gridStep : 16;
-
-    for (int x = -cfg->islandRadius; x <= cfg->islandRadius; x += step) {
-        for (int z = -cfg->islandRadius; z <= cfg->islandRadius; z += step) {
-            if (x * x + z * z > cfg->islandRadius * cfg->islandRadius)
-                continue;   /* circle, not square */
-
-            int surf = biome_at_block(g, x, SURFACE_Y, z);
-            sampleCount++;
-            if (!is_ocean(surf)) landCount++;
-
-            if (cfg->nSurface > 0) {
-                for (int i = 0; i < cfg->nSurface; i++)
-                    if (cfg->surface[i] == surf) surfaceSeen |= (1u << i);
-            }
-            if (cfg->nCave > 0) {
-                int c = biome_at_block(g, x, CAVE_Y, z);
-                for (int i = 0; i < cfg->nCave; i++)
-                    if (cfg->cave[i] == c) { caveHits[i]++; caveTotal++; }
-            }
-        }
-    }
+    if (!gather_island(g, cfg, &surfaceSeen, caveHits, &caveTotal,
+                       &landCount, &sampleCount))
+        return r;                             /* allocation failure */
 
     /* Landmass size floor: enough of the footprint must be land. */
     if (cfg->minLandPercent > 0 && sampleCount > 0 &&

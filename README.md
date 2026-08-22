@@ -102,9 +102,12 @@ Flags:
 ## How it works
 
 Each seed runs through cheap-to-expensive stages in `scanner_check` (`scan.c`):
-an inner ocean ring, land at spawn, a wider isolation ring, one pass over the
-island footprint (surface biomes, cave biomes and land fraction), the spawn
-point, and finally the stronghold check. The search is described by a
+an inner ocean ring, land at spawn, a wider isolation ring, ocean-type
+constraints across the surrounding sea, a footprint pass that flood-fills the
+spawn-connected island and gathers its surface and cave biomes (so biome
+requirements judge that island, not a separate islet within the radius) plus the
+land fraction, the spawn point, the definitive enclosure/moat flood fill, and
+finally the stronghold check. The search is described by a
 `ScanConfig` struct built on the Go side from the web menu; the size presets
 (radii, sample counts, ocean thresholds, land floor and map zoom) live in
 `sizePresets` in `server.go`, and the selectable biomes live in `catalog` in
@@ -120,5 +123,8 @@ point, and finally the stronghold check. The search is described by a
   scales with island size). A genuinely isolated landmass larger than that
   window is rejected, since its ocean border falls outside what we sample.
 - Separate, unconnected land can still appear elsewhere on the map; enclosure
-  only guarantees the spawn island itself has no land bridge out.
+  only guarantees the spawn island itself has no land bridge out. Surface and
+  cave biome requirements are judged over the spawn-connected island only, so a
+  biome sitting on such a neighbouring islet neither satisfies a requirement nor
+  trips an exclusion.
 - `MC_VERSION` in `scan.c` must match an enum in cubiomes' `generator.h`.
