@@ -116,6 +116,7 @@ var catalog = []biomeEntry{
 	{"surface", "badlands", "Badlands", int32(C.badlands)},
 	{"surface", "mushroom_fields", "Mushroom Fields", int32(C.mushroom_fields)},
 	{"surface", "cherry_grove", "Cherry Grove", int32(C.cherry_grove)},
+	{"surface", "pale_garden", "Pale Garden", int32(C.pale_garden)},
 	{"surface", "meadow", "Meadow", int32(C.meadow)},
 	{"surface", "grove", "Grove", int32(C.grove)},
 	{"surface", "snowy_slopes", "Snowy Slopes", int32(C.snowy_slopes)},

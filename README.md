@@ -127,4 +127,9 @@ finally the stronghold check. The search is described by a
   cave biome requirements are judged over the spawn-connected island only, so a
   biome sitting on such a neighbouring islet neither satisfies a requirement nor
   trips an exclusion.
-- `MC_VERSION` in `scan.c` must match an enum in cubiomes' `generator.h`.
+- `MC_VERSION` in `scan.c` must match an enum in cubiomes' `generator.h`. All
+  world generation comes from cubiomes, so wilson can only target versions (and
+  biomes) that cubiomes has reverse-engineered. The newest it currently supports
+  is `1.21 WD` (the Winter Drop / Pale Garden, 1.21.4), which is what wilson is
+  pinned to; later snapshots and their new biomes can't be searched until
+  upstream cubiomes adds them.
