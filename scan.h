@@ -21,9 +21,10 @@ typedef struct {
     int surfaceMode[SCAN_MAX_LIST];
     int nSurface;
 
-    /* Ocean biomes and their modes. INCLUDED types are the allowed ring
-     * "material" (with none included, any ocean counts). REQUIRED types must
-     * appear on the outer ring; EXCLUDED types must not. */
+    /* Ocean biomes and their modes, applied over the surrounding-sea window like
+     * surface biomes: every REQUIRED type must appear, at least one INCLUDED type
+     * must appear (if any are listed), and no EXCLUDED type may appear. Isolation
+     * geometry is separate -- any ocean counts as water there. */
     int ocean[SCAN_MAX_LIST];
     int oceanMode[SCAN_MAX_LIST];
     int nOcean;
