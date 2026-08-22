@@ -485,18 +485,6 @@
     $('sizeHint').textContent = s ? s.label + (s.key === 'XXL' ? ' — big enough to contain a stronghold' : '') : '';
   }
 
-  // Plain multi-select chips (used for the ocean-types list).
-  function buildChips(cat, opts) {
-    const box = $(cat); box.innerHTML = '';
-    opts.forEach(o => {
-      const c = document.createElement('span');
-      c.className = 'chip'; c.textContent = o.label; c.dataset.key = o.key;
-      c.onclick = () => c.classList.toggle('on');
-      box.appendChild(c);
-    });
-  }
-
-  function selected(cat) { return [...$(cat).children].filter(c => c.classList.contains('on')).map(c => c.dataset.key); }
 
   function setRunning(r) {
     $('go').classList.toggle('hidden', r);
@@ -509,7 +497,6 @@
     const wRaw = parseInt($('workers').value, 10);
     const p = new URLSearchParams({
       size: state.size,
-      ocean: selected('ocean').join(','),
       minCave: Math.max(1, parseInt($('minCave').value, 10) || 3),
       n: Math.max(1, parseInt($('n').value, 10) || 5),
       workers: (Number.isFinite(wRaw) && wRaw > 0) ? wRaw : 0,

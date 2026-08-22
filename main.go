@@ -269,10 +269,13 @@ func main() {
 	check := flag.String("check", "", "diagnose a single seed against -size, then exit")
 	size := flag.String("size", "L", "size preset for -check (S/M/L/XL/XXL)")
 	moat := flag.Int("moat", 0, "min mainland moat (blocks) for -check")
+	oceanInc := flag.String("oceanInc", "", "comma-separated included ocean types for -check (whitelist)")
+	oceanReq := flag.String("oceanReq", "", "comma-separated required ocean types for -check")
+	oceanExc := flag.String("oceanExc", "", "comma-separated excluded ocean types for -check")
 	flag.Parse()
 
 	if *check != "" {
-		runCheck(*check, *size, *moat)
+		runCheck(*check, *size, *moat, *oceanReq, *oceanInc, *oceanExc)
 		return
 	}
 
@@ -341,7 +344,7 @@ func repeatMode(mode int32, n int) []int32 {
 // whether it would match. Handy for confirming a build behaves as expected:
 //
 //	./wilson -check <seed> -size L [-moat 300]
-func runCheck(seedStr, size string, moat int) {
+func runCheck(seedStr, size string, moat int, oceanReq, oceanInc, oceanExc string) {
 	seed, err := strconv.ParseInt(seedStr, 10, 64)
 	if err != nil {
 		log.Fatalf("bad seed %q: %v", seedStr, err)
@@ -349,6 +352,7 @@ func runCheck(seedStr, size string, moat int) {
 	cfg := geometryForSize(size)
 	cfg.RequireEnclosed = true
 	cfg.MinMoat = moat
+	cfg.Ocean, cfg.OceanMode = triSelection(oceanReq, oceanInc, oceanExc, biomeKeyToID)
 	if moat > 0 { // mirror the server's window growth
 		if needed := cfg.IslandRadius + moat + 4*cfg.IslandStep; needed > cfg.IslandWindow {
 			cfg.IslandWindow = needed
