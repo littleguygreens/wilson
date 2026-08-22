@@ -44,17 +44,23 @@ static int is_ocean(int id)
     }
 }
 
-/* Applies the ocean-type tri-state over the whole surrounding sea, the same way
- * surface biomes are checked over the footprint: sample a grid across the island
- * window, look only at ocean cells, and require every REQUIRED ocean type to
- * appear, at least one INCLUDED type to appear (if any are listed), and no
- * EXCLUDED type to appear anywhere in view. Isolation geometry is handled
- * separately (any ocean isolates); this concerns ocean *type* only. Returns 1 if
- * satisfied, including when no ocean modes are configured. */
+/* Applies the ocean-type tri-state over the whole surrounding sea. Oceans use a
+ * whitelist rule, not the "at least one" rule the land biomes use: the sea is
+ * entirely ocean, so the point is to constrain *which* ocean types may make it
+ * up. If any type is INCLUDED, the sea may contain only INCLUDED or REQUIRED
+ * types -- any other ocean type (e.g. frozen you left out) rejects the seed.
+ * EXCLUDED types reject on any presence (useful when nothing is included), and
+ * every REQUIRED type must actually appear. With no ocean modes set, anything
+ * goes. Isolation geometry is separate (any ocean isolates); this is type only.
+ * Returns 1 if satisfied. */
 static int ocean_area_constraints(Generator *g, const ScanConfig *cfg)
 {
     if (cfg->nOcean <= 0)
         return 1;
+
+    int anyIncluded = 0;
+    for (int i = 0; i < cfg->nOcean; i++)
+        if (cfg->oceanMode[i] == SEL_INCLUDED) { anyIncluded = 1; break; }
 
     /* Sample the same window the enclosure check uses -- the visible sea around
      * the island. Fall back to the outer isolation radius if it is unset. */
@@ -63,25 +69,29 @@ static int ocean_area_constraints(Generator *g, const ScanConfig *cfg)
     if (window <= 0 || step <= 0)
         return 1;
 
-    unsigned seen = 0;                      /* bit i = cfg->ocean[i] seen */
+    int reqSeen[SCAN_MAX_LIST];
+    memset(reqSeen, 0, sizeof(reqSeen));
+
     for (int x = -window; x <= window; x += step)
         for (int z = -window; z <= window; z += step) {
             int b = biome_at_block(g, x, SURFACE_Y, z);
-            if (!is_ocean(b)) continue;     /* only ocean cells carry a type */
+            if (!is_ocean(b)) continue;         /* only ocean cells carry a type */
+
+            int mode = -1, idx = -1;            /* this type's configured mode */
             for (int i = 0; i < cfg->nOcean; i++)
-                if (cfg->ocean[i] == b) seen |= (1u << i);
+                if (cfg->ocean[i] == b) { mode = cfg->oceanMode[i]; idx = i; break; }
+
+            if (mode == SEL_EXCLUDED)
+                return 0;                       /* an excluded type is present */
+            if (anyIncluded && mode != SEL_INCLUDED && mode != SEL_REQUIRED)
+                return 0;                       /* off the whitelist */
+            if (mode == SEL_REQUIRED)
+                reqSeen[idx] = 1;
         }
 
-    int hasInc = 0, incSeen = 0;
-    for (int i = 0; i < cfg->nOcean; i++) {
-        int present = (seen >> i) & 1u;
-        switch (cfg->oceanMode[i]) {
-        case SEL_REQUIRED: if (!present) return 0; break;
-        case SEL_EXCLUDED: if (present)  return 0; break;
-        default:           hasInc = 1; if (present) incSeen = 1; break;
-        }
-    }
-    if (hasInc && !incSeen) return 0;
+    for (int i = 0; i < cfg->nOcean; i++)
+        if (cfg->oceanMode[i] == SEL_REQUIRED && !reqSeen[i])
+            return 0;                           /* a required type never appeared */
     return 1;
 }
 
