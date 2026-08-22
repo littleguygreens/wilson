@@ -317,6 +317,20 @@ func scanHandler(w http.ResponseWriter, r *http.Request) {
 
 	cfg := configFromQuery(r)
 
+	// Log exactly which filters this scan received, so it is obvious from the
+	// terminal what was actually searched (e.g. whether an ocean whitelist was
+	// really sent). A blank ocean field here means no ocean constraint applied.
+	q := r.URL.Query()
+	tri := func(p string) string {
+		req, inc, exc := q.Get(p+"Req"), q.Get(p+"Inc"), q.Get(p+"Exc")
+		if req == "" && inc == "" && exc == "" {
+			return "-"
+		}
+		return fmt.Sprintf("inc=[%s] req=[%s] exc=[%s]", inc, req, exc)
+	}
+	log.Printf("scan: size=%s moat=%s | ocean %s | surface %s | cave %s | struct %s",
+		q.Get("size"), q.Get("moat"), tri("ocean"), tri("surface"), tri("cave"), tri("struct"))
+
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
