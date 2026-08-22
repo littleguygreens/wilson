@@ -131,6 +131,7 @@ func biomesHandler(w http.ResponseWriter, r *http.Request) {
 	type opt struct {
 		Key   string `json:"key"`
 		Label string `json:"label"`
+		Exp   bool   `json:"exp,omitempty"` // only shown in experimental 26.3 mode
 	}
 	type structOpt struct {
 		Key   string `json:"key"`
@@ -147,7 +148,7 @@ func biomesHandler(w http.ResponseWriter, r *http.Request) {
 	}{Sizes: sizePresets, MaxSurface: maxSurface}
 
 	for _, e := range catalog {
-		o := opt{Key: e.Key, Label: e.Label}
+		o := opt{Key: e.Key, Label: e.Label, Exp: e.exp263}
 		switch e.Category {
 		case "surface":
 			out.Surface = append(out.Surface, o)
@@ -258,6 +259,8 @@ func configFromQuery(r *http.Request) Config {
 		cfg.StructMode = smode
 		cfg.StructRadius = cfg.IslandRadius
 	}
+
+	cfg.Exp263 = q.Get("exp263") == "1"
 
 	// Full-enclosure flood fill is always on: results are never peninsulas.
 	cfg.RequireEnclosed = true
@@ -407,9 +410,11 @@ func mapHandler(w http.ResponseWriter, r *http.Request) {
 		sh = &marker{queryInt(r, "stx", 0), queryInt(r, "stz", 0)}
 	}
 
+	exp263 := r.URL.Query().Get("exp263") == "1"
+
 	w.Header().Set("Content-Type", "image/png")
 	w.Header().Set("Cache-Control", "public, max-age=3600")
-	if err := renderPNG(w, uint64(seed), step, y, spawn, sh); err != nil && !isClientGone(err) {
+	if err := renderPNG(w, uint64(seed), step, y, exp263, spawn, sh); err != nil && !isClientGone(err) {
 		log.Printf("render map for seed %d: %v", seed, err)
 	}
 }
@@ -434,7 +439,8 @@ func biomeHandler(w http.ResponseWriter, r *http.Request) {
 	x := queryInt(r, "x", 0)
 	z := queryInt(r, "z", 0)
 	y := queryInt(r, "y", 60)
-	id, name := biomeAt(uint64(seed), x, y, z)
+	exp263 := r.URL.Query().Get("exp263") == "1"
+	id, name := biomeAt(uint64(seed), x, y, z, exp263)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{"id": id, "name": name})
 }

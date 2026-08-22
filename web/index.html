@@ -164,6 +164,14 @@
       <div id="sizeHint" class="hint"></div>
     </div>
 
+    <div class="group">
+      <label style="display:flex;align-items:center;gap:9px;cursor:pointer">
+        <input id="exp263" type="checkbox">
+        <span><b>⚗ Experimental: Minecraft 26.3</b> — adds the <b>Dappled Forest</b> biome</span>
+      </label>
+      <div class="hint">Uses cubiomes' 1.21 generator with a verified relabel for Dappled Forest (its climate is unchanged in 26.3). Enables the Dappled Forest chip below and draws it on maps. Other 26.3-only biomes aren't modelled yet.</div>
+    </div>
+
     <div class="trilegend">Chips cycle: <span class="k off">off</span> → <span class="k inc">＋ include</span> → <span class="k req">★ require</span> → <span class="k exc">✕ exclude</span></div>
 
     <div class="group collapsible" data-sec="biomes">
@@ -264,7 +272,7 @@
 <script>
   const $ = (id) => document.getElementById(id);
   let es = null;
-  const state = { size: 'M', sizes: [], structs: [], showStructs: new Set(), caveView: false, caveY: -50,
+  const state = { size: 'M', sizes: [], structs: [], surfaceOpts: [], showStructs: new Set(), caveView: false, caveY: -50, exp263: false,
     surfSel: new Map(), oceanSel: new Map(), caveSel: new Map(), structSel: new Map() };
 
   fetch('/api/biomes').then(r => r.json()).then(setup).catch(() => {
@@ -283,7 +291,15 @@
       seg.appendChild(b);
     });
     updateSizeHint();
-    buildTriChips('surface', d.surface, state.surfSel);
+    state.surfaceOpts = d.surface;
+    buildSurfaceChips();
+    $('exp263').onchange = () => {
+      state.exp263 = $('exp263').checked;
+      if (!state.exp263) state.surfSel.forEach((v, k) => { if (isExpKey(k)) state.surfSel.delete(k); });
+      buildSurfaceChips();
+      applyLayerAll();
+      updateBadges();
+    };
     buildTriChips('ocean', d.ocean, state.oceanSel);
     buildTriChips('cave', d.cave, state.caveSel);
     buildTriChips('reqStructs', d.structures, state.structSel);
@@ -406,7 +422,8 @@
       stronghold: $('stronghold').checked ? 1 : 0,
       shDist: parseInt($('shDist').value, 10) || 1700,
       n: parseInt($('n').value, 10) || 5,
-      workers: $('workers').value || ''
+      workers: $('workers').value || '',
+      exp263: state.exp263 ? 1 : 0
     };
   }
 
@@ -421,7 +438,8 @@
 
   function applyPreset(p) {
     setSize(p.size || 'M');
-    state.surfSel = migrateSel(p.surf, p.surface, p.surfaceAll); paintTri('surface', state.surfSel);
+    state.exp263 = !!p.exp263; $('exp263').checked = state.exp263;
+    state.surfSel = migrateSel(p.surf, p.surface, p.surfaceAll); buildSurfaceChips();
     state.caveSel = migrateSel(Array.isArray(p.cave) ? null : p.cave, Array.isArray(p.cave) ? p.cave : null, p.caveAll); paintTri('cave', state.caveSel);
     state.structSel = migrateSel(p.struct, p.structures, false); paintTri('reqStructs', state.structSel);
     state.oceanSel = migrateSel(Array.isArray(p.ocean) ? null : p.ocean, Array.isArray(p.ocean) ? p.ocean : null, false); paintTri('ocean', state.oceanSel);
@@ -444,6 +462,12 @@
     state.size = key;
     [...$('sizes').children].forEach(c => c.classList.toggle('on', c.dataset.key === key));
     updateSizeHint();
+  }
+  // Surface chips include experimental (26.3) biomes only when that mode is on.
+  function isExpKey(key) { return (state.surfaceOpts.find(o => o.key === key) || {}).exp === true; }
+  function buildSurfaceChips() {
+    const opts = state.surfaceOpts.filter(o => !o.exp || state.exp263);
+    buildTriChips('surface', opts, state.surfSel);
   }
   // Tri-state chips: each cycles off -> include -> require -> exclude -> off,
   // storing the state in selMap (key -> 'inc'|'req'|'exc').
@@ -513,6 +537,7 @@
     setTri('struct', state.structSel);
     if ($('stronghold').checked) { p.set('stronghold', '1'); p.set('shDist', $('shDist').value); }
     if ($('moat').value !== '0') p.set('moat', $('moat').value);
+    if (state.exp263) p.set('exp263', '1');
 
     $('results').innerHTML = '';
     $('empty').classList.add('hidden');
@@ -533,6 +558,7 @@
   }
 
   function addMatch(m) {
+    m.exp263 = state.exp263; // remember the mode this find was made in
     $('found').textContent = String((parseInt($('found').textContent, 10) || 0) + 1);
     $('results').prepend(makeCard(m, false));
   }
@@ -543,6 +569,7 @@
   function makeCard(m, isSaved) {
     const q = new URLSearchParams({ seed: m.seed, step: m.step, sx: m.spawnX, sz: m.spawnZ });
     if (m.hasStronghold) { q.set('st', '1'); q.set('stx', m.strongholdX); q.set('stz', m.strongholdZ); }
+    if (m.exp263) q.set('exp263', '1');
 
     const card = document.createElement('div'); card.className = 'card';
     const top = document.createElement('div'); top.className = 'top';
@@ -576,6 +603,7 @@
     const img = document.createElement('img'); img.loading = 'lazy';
     img.alt = 'map for seed ' + m.seed;
     img.dataset.seed = m.seed; img.dataset.step = m.step; img.dataset.mapq = q.toString();
+    img.dataset.exp263 = m.exp263 ? '1' : '';
     setLayer(img);
     img.addEventListener('pointermove', onMapHover);
     img.addEventListener('pointerleave', hideTip);
@@ -805,7 +833,7 @@
     if (cell === tipLastCell) return;
     tipLastCell = cell;
     const token = ++tipReqToken;
-    fetch(`/api/biome?seed=${encodeURIComponent(img.dataset.seed)}&x=${bx}&z=${bz}&y=${y}`)
+    fetch(`/api/biome?seed=${encodeURIComponent(img.dataset.seed)}&x=${bx}&z=${bz}&y=${y}${img.dataset.exp263 ? '&exp263=1' : ''}`)
       .then((r) => r.json())
       .then((d) => { if (token !== tipReqToken) return; img._biome = prettyBiome(d.name); renderTip(); })
       .catch(() => {});

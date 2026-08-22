@@ -72,6 +72,19 @@ Matching seeds stream in live with their biome maps (white cross = spawn, red
 pin = stronghold). Tap a seed to copy it. Hover the map to read the block
 coordinates and biome under the cursor.
 
+## Experimental: Minecraft 26.3 (Dappled Forest)
+
+A checkbox in the Search tab enables an experimental **26.3** mode that adds the
+new **Dappled Forest** biome. cubiomes has no 26.3 generator, but the decompiled
+26.3 world-gen shows the climate noise is unchanged from 1.21 -- Dappled Forest
+is a surgical biome edit occupying the plains cell at temperature band 1,
+humidity band 0, weirdness >= 0. So wilson keeps cubiomes' fast, exact 1.21
+generator and *relabels* just that cell (`surface_biome` in `scan.c`). This was
+verified against chunkbase: for seed `1728186647319`, wilson reports Dappled
+Forest at (1250, -100) and (1250, 250), matching the map. When the mode is off,
+generation is byte-identical to plain 1.21. Other 26.3-only biomes (e.g. sulfur
+caves) are not modelled yet.
+
 ## Saving finds
 
 Tap **☆ Save** on any result to keep it. The **Saved** tab lists your kept

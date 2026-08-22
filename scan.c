@@ -23,6 +23,37 @@ static int biome_at_block(Generator *g, int bx, int by, int bz)
     return getBiomeAt(g, 4, bx >> 2, by >> 2, bz >> 2);
 }
 
+/* Experimental Minecraft 26.3 support. cubiomes has no 26.3 generator, but the
+ * decompiled 26.3 world-gen shows the only relevant change is a surgical biome
+ * edit on the unchanged 1.18 climate noise: Dappled Forest occupies the plains
+ * cell at temperature band 1, humidity band 0, weirdness >= 0. So we keep
+ * cubiomes' fast, exact 1.21 generator and relabel that one cell. Verified
+ * against chunkbase (seed 1728186647319: dappled at 1250,-100 and 1250,250).
+ * Ids beyond cubiomes' enum start at pale_garden(186)+1. */
+#define B_DAPPLED_FOREST  187
+#define DAP_T_LO  (-4500)   /* temperatures[1] = span(-0.45, -0.15) */
+#define DAP_T_HI  (-1500)
+#define DAP_H_LO  (-10000)  /* humidities[0]   = span(-1.0, -0.35) */
+#define DAP_H_HI  (-3500)
+
+/* Surface-biome identity at a block, honouring the 26.3 relabel when exp263 is
+ * set. Only used where the biome *name* matters (island biome gathering, the
+ * hover tooltip, the map). Geometry/ocean/cave lookups keep plain biome_at_block
+ * so island shape is byte-identical to 1.21. */
+static int surface_biome(Generator *g, int exp263, int bx, int by, int bz)
+{
+    if (!exp263)
+        return getBiomeAt(g, 4, bx >> 2, by >> 2, bz >> 2);
+    int64_t np[6];
+    int b = sampleBiomeNoise(&g->bn, np, bx >> 2, by >> 2, bz >> 2, NULL, 0);
+    if (b == plains &&
+        np[NP_TEMPERATURE] >= DAP_T_LO && np[NP_TEMPERATURE] <= DAP_T_HI &&
+        np[NP_HUMIDITY]    >= DAP_H_LO && np[NP_HUMIDITY]    <= DAP_H_HI &&
+        np[NP_WEIRDNESS]   >= 0)
+        return B_DAPPLED_FOREST;
+    return b;
+}
+
 static int in_list(int id, const int *list, int n)
 {
     for (int i = 0; i < n; i++)
@@ -296,7 +327,7 @@ static int gather_island(Generator *g, const ScanConfig *cfg,
             int bx = (i - c) * step, bz = (j - c) * step;
             if (bx * bx + bz * bz > R * R)
                 continue;
-            int surf = biome_at_block(g, bx, SURFACE_Y, bz);
+            int surf = surface_biome(g, cfg->exp263, bx, SURFACE_Y, bz);
             for (int k = 0; k < cfg->nSurface; k++)
                 if (cfg->surface[k] == surf) *surfaceSeen |= (1u << k);
             if (cfg->nCave > 0) {
@@ -480,11 +511,11 @@ ScanResult scanner_check(void *s, uint64_t seed, const ScanConfig *cfg)
     return r;
 }
 
-int scanner_biome(void *s, uint64_t seed, int x, int y, int z)
+int scanner_biome(void *s, uint64_t seed, int x, int y, int z, int exp263)
 {
     Generator *g = (Generator *)s;
     applySeed(g, DIM_OVERWORLD, seed);
-    return biome_at_block(g, x, y, z);
+    return surface_biome(g, exp263, x, y, z);
 }
 
 /* ---- structures ------------------------------------------------------ */
@@ -534,7 +565,7 @@ int scanner_structures(void *s, uint64_t seed, int structType,
 /* ---- map rendering support ------------------------------------------- */
 
 void scanner_biome_grid(void *s, uint64_t seed, int size, int step,
-                        int y, int *out)
+                        int y, int exp263, int *out)
 {
     Generator *g = (Generator *)s;
     applySeed(g, DIM_OVERWORLD, seed);
@@ -544,7 +575,7 @@ void scanner_biome_grid(void *s, uint64_t seed, int size, int step,
         for (int i = 0; i < size; i++) {
             int bx = (i - half) * step;
             int bz = (j - half) * step;
-            out[j * size + i] = biome_at_block(g, bx, y, bz);
+            out[j * size + i] = surface_biome(g, exp263, bx, y, bz);
         }
     }
 }

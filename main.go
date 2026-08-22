@@ -85,7 +85,8 @@ type Config struct {
 	StructMode   []int32
 	StructRadius int
 
-	MapStep int // rendering zoom; not part of the C filter
+	MapStep int  // rendering zoom; not part of the C filter
+	Exp263  bool // experimental Minecraft 26.3 (Dappled Forest) relabel
 }
 
 // biomeEntry ties a stable UI key to a cubiomes biome id. The id stays
@@ -95,51 +96,58 @@ type biomeEntry struct {
 	Key      string
 	Label    string
 	id       int32
+	exp263   bool // only offered in the experimental 26.3 mode
 }
+
+// dappledForestID is the biome id for Dappled Forest. cubiomes' enum stops at
+// pale_garden(186); 26.3's Dappled Forest is synthesised by scan.c's relabel, so
+// it lives just past the enum. Keep it in sync with B_DAPPLED_FOREST in scan.c.
+const dappledForestID int32 = 187
 
 // catalog is the authoritative list of selectable biomes. The web menu is built
 // from it (keys + labels), and search requests map keys back to ids through it.
 var catalog = []biomeEntry{
 	// Island surface biomes.
-	{"surface", "plains", "Plains", int32(C.plains)},
-	{"surface", "forest", "Forest", int32(C.forest)},
-	{"surface", "birch_forest", "Birch Forest", int32(C.birch_forest)},
-	{"surface", "dark_forest", "Dark Forest", int32(C.dark_forest)},
-	{"surface", "taiga", "Taiga", int32(C.taiga)},
-	{"surface", "snowy_taiga", "Snowy Taiga", int32(C.snowy_taiga)},
-	{"surface", "jungle", "Jungle", int32(C.jungle)},
-	{"surface", "bamboo_jungle", "Bamboo Jungle", int32(C.bamboo_jungle)},
-	{"surface", "savanna", "Savanna", int32(C.savanna)},
-	{"surface", "desert", "Desert", int32(C.desert)},
-	{"surface", "swamp", "Swamp", int32(C.swamp)},
-	{"surface", "mangrove_swamp", "Mangrove Swamp", int32(C.mangrove_swamp)},
-	{"surface", "badlands", "Badlands", int32(C.badlands)},
-	{"surface", "mushroom_fields", "Mushroom Fields", int32(C.mushroom_fields)},
-	{"surface", "cherry_grove", "Cherry Grove", int32(C.cherry_grove)},
-	{"surface", "pale_garden", "Pale Garden", int32(C.pale_garden)},
-	{"surface", "meadow", "Meadow", int32(C.meadow)},
-	{"surface", "grove", "Grove", int32(C.grove)},
-	{"surface", "snowy_slopes", "Snowy Slopes", int32(C.snowy_slopes)},
-	{"surface", "windswept_hills", "Windswept Hills", int32(C.windswept_hills)},
-	{"surface", "jagged_peaks", "Jagged Peaks", int32(C.jagged_peaks)},
-	{"surface", "frozen_peaks", "Frozen Peaks", int32(C.frozen_peaks)},
-	{"surface", "stony_peaks", "Stony Peaks", int32(C.stony_peaks)},
+	{"surface", "plains", "Plains", int32(C.plains), false},
+	{"surface", "forest", "Forest", int32(C.forest), false},
+	{"surface", "birch_forest", "Birch Forest", int32(C.birch_forest), false},
+	{"surface", "dark_forest", "Dark Forest", int32(C.dark_forest), false},
+	{"surface", "taiga", "Taiga", int32(C.taiga), false},
+	{"surface", "snowy_taiga", "Snowy Taiga", int32(C.snowy_taiga), false},
+	{"surface", "jungle", "Jungle", int32(C.jungle), false},
+	{"surface", "bamboo_jungle", "Bamboo Jungle", int32(C.bamboo_jungle), false},
+	{"surface", "savanna", "Savanna", int32(C.savanna), false},
+	{"surface", "desert", "Desert", int32(C.desert), false},
+	{"surface", "swamp", "Swamp", int32(C.swamp), false},
+	{"surface", "mangrove_swamp", "Mangrove Swamp", int32(C.mangrove_swamp), false},
+	{"surface", "badlands", "Badlands", int32(C.badlands), false},
+	{"surface", "mushroom_fields", "Mushroom Fields", int32(C.mushroom_fields), false},
+	{"surface", "cherry_grove", "Cherry Grove", int32(C.cherry_grove), false},
+	{"surface", "pale_garden", "Pale Garden", int32(C.pale_garden), false},
+	{"surface", "dappled_forest", "Dappled Forest", dappledForestID, true},
+	{"surface", "meadow", "Meadow", int32(C.meadow), false},
+	{"surface", "grove", "Grove", int32(C.grove), false},
+	{"surface", "snowy_slopes", "Snowy Slopes", int32(C.snowy_slopes), false},
+	{"surface", "windswept_hills", "Windswept Hills", int32(C.windswept_hills), false},
+	{"surface", "jagged_peaks", "Jagged Peaks", int32(C.jagged_peaks), false},
+	{"surface", "frozen_peaks", "Frozen Peaks", int32(C.frozen_peaks), false},
+	{"surface", "stony_peaks", "Stony Peaks", int32(C.stony_peaks), false},
 
 	// Allowed ocean types for the isolation rings.
-	{"ocean", "ocean", "Ocean", int32(C.ocean)},
-	{"ocean", "deep_ocean", "Deep Ocean", int32(C.deep_ocean)},
-	{"ocean", "warm_ocean", "Warm Ocean", int32(C.warm_ocean)},
-	{"ocean", "lukewarm_ocean", "Lukewarm Ocean", int32(C.lukewarm_ocean)},
-	{"ocean", "deep_lukewarm_ocean", "Deep Lukewarm", int32(C.deep_lukewarm_ocean)},
-	{"ocean", "cold_ocean", "Cold Ocean", int32(C.cold_ocean)},
-	{"ocean", "deep_cold_ocean", "Deep Cold", int32(C.deep_cold_ocean)},
-	{"ocean", "frozen_ocean", "Frozen Ocean", int32(C.frozen_ocean)},
-	{"ocean", "deep_frozen_ocean", "Deep Frozen", int32(C.deep_frozen_ocean)},
+	{"ocean", "ocean", "Ocean", int32(C.ocean), false},
+	{"ocean", "deep_ocean", "Deep Ocean", int32(C.deep_ocean), false},
+	{"ocean", "warm_ocean", "Warm Ocean", int32(C.warm_ocean), false},
+	{"ocean", "lukewarm_ocean", "Lukewarm Ocean", int32(C.lukewarm_ocean), false},
+	{"ocean", "deep_lukewarm_ocean", "Deep Lukewarm", int32(C.deep_lukewarm_ocean), false},
+	{"ocean", "cold_ocean", "Cold Ocean", int32(C.cold_ocean), false},
+	{"ocean", "deep_cold_ocean", "Deep Cold", int32(C.deep_cold_ocean), false},
+	{"ocean", "frozen_ocean", "Frozen Ocean", int32(C.frozen_ocean), false},
+	{"ocean", "deep_frozen_ocean", "Deep Frozen", int32(C.deep_frozen_ocean), false},
 
 	// Underground cave biomes.
-	{"cave", "lush_caves", "Lush Caves", int32(C.lush_caves)},
-	{"cave", "dripstone_caves", "Dripstone Caves", int32(C.dripstone_caves)},
-	{"cave", "deep_dark", "Deep Dark", int32(C.deep_dark)},
+	{"cave", "lush_caves", "Lush Caves", int32(C.lush_caves), false},
+	{"cave", "dripstone_caves", "Dripstone Caves", int32(C.dripstone_caves), false},
+	{"cave", "deep_dark", "Deep Dark", int32(C.deep_dark), false},
 }
 
 // biomeKeyToID resolves a UI key to its cubiomes biome id.
@@ -244,6 +252,7 @@ func toCConfig(cfg Config) C.ScanConfig {
 	c.nStructures = putList(&c.structures, cfg.Structures)
 	putList(&c.structMode, cfg.StructMode)
 	c.structRadius = C.int(cfg.StructRadius)
+	c.exp263 = boolToC(cfg.Exp263)
 	return c
 }
 
@@ -484,19 +493,22 @@ func palette() [256]color.RGBA {
 				A: 255,
 			}
 		}
+		// Dappled Forest (synthesised id 187) has no cubiomes colour; give it a
+		// muted late-autumn khaki so it reads distinctly on the map.
+		paletteData[dappledForestID] = color.RGBA{R: 176, G: 156, B: 92, A: 255}
 	})
 	return paletteData
 }
 
 // renderImage draws the biome map for a seed at the given block-per-pixel step
 // and sample height y, marks spawn, and (if present) marks the stronghold.
-func renderImage(s unsafe.Pointer, seed uint64, step, y int, spawn marker, sh *marker) *image.RGBA {
+func renderImage(s unsafe.Pointer, seed uint64, step, y int, exp263 bool, spawn marker, sh *marker) *image.RGBA {
 	if step < 1 {
 		step = 4
 	}
 	grid := make([]C.int, mapPixels*mapPixels)
 	C.scanner_biome_grid(s, C.uint64_t(seed), mapPixels, C.int(step), C.int(y),
-		(*C.int)(unsafe.Pointer(&grid[0])))
+		boolToC(exp263), (*C.int)(unsafe.Pointer(&grid[0])))
 
 	p := palette()
 	img := image.NewRGBA(image.Rect(0, 0, mapPixels, mapPixels))
@@ -579,7 +591,7 @@ func hitMarkers(h hit) (marker, *marker) {
 // disk. Used by the CLI.
 func writeMapPNG(s unsafe.Pointer, h hit, step int, path string) error {
 	spawn, sh := hitMarkers(h)
-	img := renderImage(s, h.seed, step, 60, spawn, sh)
+	img := renderImage(s, h.seed, step, 60, false, spawn, sh)
 	f, err := os.Create(path)
 	if err != nil {
 		return err
@@ -590,10 +602,10 @@ func writeMapPNG(s unsafe.Pointer, h hit, step int, path string) error {
 
 // renderPNG renders a map straight to w at sample height y. It owns its own
 // generator, so it is safe to call concurrently. Used by the web server.
-func renderPNG(w io.Writer, seed uint64, step, y int, spawn marker, sh *marker) error {
+func renderPNG(w io.Writer, seed uint64, step, y int, exp263 bool, spawn marker, sh *marker) error {
 	s := C.scanner_new()
 	defer C.scanner_free(s)
-	img := renderImage(s, seed, step, y, spawn, sh)
+	img := renderImage(s, seed, step, y, exp263, spawn, sh)
 	return png.Encode(w, img)
 }
 
@@ -602,11 +614,16 @@ func renderPNG(w io.Writer, seed uint64, step, y int, spawn marker, sh *marker) 
 var biomeGenPool = sync.Pool{New: func() any { return C.scanner_new() }}
 
 // biomeAt returns the biome id and name at a block coordinate for one seed.
-func biomeAt(seed uint64, x, y, z int) (int, string) {
+func biomeAt(seed uint64, x, y, z int, exp263 bool) (int, string) {
 	s := biomeGenPool.Get().(unsafe.Pointer)
 	defer biomeGenPool.Put(s)
-	id := int(C.scanner_biome(s, C.uint64_t(seed), C.int(x), C.int(y), C.int(z)))
-	name := C.GoString(C.biome2str(C.MC_1_21, C.int(id)))
+	id := int(C.scanner_biome(s, C.uint64_t(seed), C.int(x), C.int(y), C.int(z), boolToC(exp263)))
+	var name string
+	if id == int(dappledForestID) {
+		name = "dappled_forest" // synthesised id; cubiomes' biome2str can't name it
+	} else {
+		name = C.GoString(C.biome2str(C.MC_1_21, C.int(id)))
+	}
 	if name == "" {
 		name = fmt.Sprintf("biome %d", id)
 	}

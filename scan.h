@@ -74,6 +74,11 @@ typedef struct {
     int structMode[SCAN_MAX_LIST];
     int nStructures;
     int structRadius;
+
+    /* Experimental Minecraft 26.3 mode: keep cubiomes' 1.21 generator but relabel
+     * the plains cell that became Dappled Forest in 26.3 (see surface_biome in
+     * scan.c). 0 = plain 1.21 behaviour. */
+    int exp263;
 } ScanConfig;
 
 /* Per-feature selection modes. */
@@ -101,8 +106,9 @@ void        scanner_free(void *s);
 
 ScanResult  scanner_check(void *s, uint64_t seed, const ScanConfig *cfg);
 
-/* Biome id at a single block coordinate (for the hover tooltip). */
-int         scanner_biome(void *s, uint64_t seed, int x, int y, int z);
+/* Biome id at a single block coordinate (for the hover tooltip). exp263 enables
+ * the experimental 26.3 Dappled Forest relabel. */
+int         scanner_biome(void *s, uint64_t seed, int x, int y, int z, int exp263);
 
 /* Finds viable instances of one structure type (a cubiomes StructureType) whose
  * position falls in the block box [x0,z0]-[x1,z1]. Writes up to `max` (x,z)
@@ -113,7 +119,7 @@ int         scanner_structures(void *s, uint64_t seed, int structType,
 /* Fills out[size*size] with biome ids for a square centred on 0,0.
  * step = blocks per pixel. y = block height to sample at. */
 void        scanner_biome_grid(void *s, uint64_t seed, int size, int step,
-                               int y, int *out);
+                               int y, int exp263, int *out);
 
 /* Copies cubiomes' 256-entry RGB palette into out[768]. */
 void        scanner_colors(unsigned char *out);
