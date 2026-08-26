@@ -625,6 +625,65 @@ func renderPNG(w io.Writer, seed uint64, step, y int, exp263 bool, spawn marker,
 	return png.Encode(w, img)
 }
 
+// caveOverlayColor gives a bold outline colour for each cave biome (transparent
+// otherwise). Must match the legend swatches in web/index.html.
+func caveOverlayColor(id int) (color.RGBA, bool) {
+	switch id {
+	case int(C.lush_caves):
+		return color.RGBA{0x55, 0xd1, 0x6a, 0xff}, true
+	case int(C.dripstone_caves):
+		return color.RGBA{0xd1, 0x8a, 0x3a, 0xff}, true
+	case int(C.deep_dark):
+		return color.RGBA{0x35, 0xc9, 0xd6, 0xff}, true
+	}
+	return color.RGBA{}, false
+}
+
+// renderCaveOverlay builds a transparent image containing only the outlines of
+// cave biomes at height y, to stack over the surface map so you can see what
+// cave sits under what surface biome.
+func renderCaveOverlay(s unsafe.Pointer, seed uint64, step, y int, exp263 bool) *image.RGBA {
+	if step < 1 {
+		step = 4
+	}
+	grid := make([]C.int, mapPixels*mapPixels)
+	C.scanner_biome_grid(s, C.uint64_t(seed), mapPixels, C.int(step), C.int(y),
+		boolToC(exp263), (*C.int)(unsafe.Pointer(&grid[0])))
+	img := image.NewRGBA(image.Rect(0, 0, mapPixels, mapPixels))
+	at := func(i, j int) int { return int(grid[j*mapPixels+i]) }
+	for j := 0; j < mapPixels; j++ {
+		for i := 0; i < mapPixels; i++ {
+			id := at(i, j)
+			col, ok := caveOverlayColor(id)
+			if !ok {
+				continue
+			}
+			// A cave cell is an outline pixel if any 4-neighbour is a different
+			// biome (or the grid edge) -- i.e. it sits on the region border.
+			edge := i == 0 || j == 0 || i == mapPixels-1 || j == mapPixels-1 ||
+				at(i-1, j) != id || at(i+1, j) != id || at(i, j-1) != id || at(i, j+1) != id
+			if !edge {
+				continue
+			}
+			img.SetRGBA(i, j, col) // 2px line for legibility over the surface map
+			if i+1 < mapPixels {
+				img.SetRGBA(i+1, j, col)
+			}
+			if j+1 < mapPixels {
+				img.SetRGBA(i, j+1, col)
+			}
+		}
+	}
+	return img
+}
+
+func renderCaveOverlayPNG(w io.Writer, seed uint64, step, y int, exp263 bool) error {
+	s := C.scanner_new()
+	defer C.scanner_free(s)
+	img := renderCaveOverlay(s, seed, step, y, exp263)
+	return png.Encode(w, img)
+}
+
 // biomeGenPool reuses generators across biome lookups so each hover request
 // doesn't rebuild one from scratch. Pooled generators live for the process.
 var biomeGenPool = sync.Pool{New: func() any { return C.scanner_new() }}

@@ -111,6 +111,7 @@ func runServer(addr string) error {
 	mux.HandleFunc("/api/scan", scanHandler)
 	mux.HandleFunc("/api/inspect", inspectHandler)
 	mux.HandleFunc("/api/map", mapHandler)
+	mux.HandleFunc("/api/caveoverlay", caveOverlayHandler)
 	mux.HandleFunc("/api/biome", biomeHandler)
 	mux.HandleFunc("/api/structures", structuresHandler)
 
@@ -439,6 +440,24 @@ func mapHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "public, max-age=3600")
 	if err := renderPNG(w, uint64(seed), step, y, exp263, spawn, sh); err != nil && !isClientGone(err) {
 		log.Printf("render map for seed %d: %v", seed, err)
+	}
+}
+
+// caveOverlayHandler renders a transparent PNG of cave-biome outlines at the
+// requested depth, for stacking over the surface map.
+func caveOverlayHandler(w http.ResponseWriter, r *http.Request) {
+	seed, err := strconv.ParseInt(r.URL.Query().Get("seed"), 10, 64)
+	if err != nil {
+		http.Error(w, "bad seed", http.StatusBadRequest)
+		return
+	}
+	step := queryInt(r, "step", 4)
+	y := queryInt(r, "y", -50)
+	exp263 := r.URL.Query().Get("exp263") == "1"
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Cache-Control", "public, max-age=3600")
+	if err := renderCaveOverlayPNG(w, uint64(seed), step, y, exp263); err != nil && !isClientGone(err) {
+		log.Printf("cave overlay for seed %d: %v", seed, err)
 	}
 }
 

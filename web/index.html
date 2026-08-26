@@ -129,6 +129,7 @@
   .sw2 { width: 10px; height: 10px; border-radius: 2px; display: inline-block; margin-right: 7px; vertical-align: middle; border: 1px solid rgba(255,255,255,.35); }
   .mapwrap { position: relative; margin-top: 10px; line-height: 0; }
   .mapwrap img { margin-top: 0; }
+  .caveoverlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
   .smark { position: absolute; width: 11px; height: 11px; border-radius: 50%; border: 1.5px solid #0b0e12; transform: translate(-50%, -50%); box-shadow: 0 0 0 1px rgba(255,255,255,.45); cursor: help; }
   .maplegend { display: none; flex-wrap: wrap; gap: 5px 12px; margin-top: 9px; font-size: 12px; color: var(--muted); }
   .maplegend span { display: inline-flex; align-items: center; }
@@ -226,6 +227,13 @@
       <label class="fl">Structure markers</label>
       <div id="showStructs" class="chips" style="margin-top:6px"></div>
       <label class="sw" style="margin-top:12px"><input type="checkbox" id="caveView"> Underground (cave) biomes</label>
+      <label class="sw" style="margin-top:10px"><input type="checkbox" id="caveOutline"> Cave biome outlines (overlay on surface)</label>
+      <div id="caveLegend" class="hint" style="display:none;margin-top:8px">
+        Outlines at this depth:
+        <span style="color:#55d16a">■ Lush</span> ·
+        <span style="color:#d18a3a">■ Dripstone</span> ·
+        <span style="color:#35c9d6">■ Deep Dark</span>
+      </div>
       <div id="caveYWrap" class="hidden" style="margin-top:10px">
         <label class="fl">Depth: <b id="caveYVal">y = -50</b></label>
         <input id="caveY" type="range" min="-64" max="64" step="2" value="-50">
@@ -281,7 +289,7 @@
 <script>
   const $ = (id) => document.getElementById(id);
   let es = null;
-  const state = { size: 'M', sizes: [], structs: [], surfaceOpts: [], showStructs: new Set(), caveView: false, caveY: -50, exp263: false,
+  const state = { size: 'M', sizes: [], structs: [], surfaceOpts: [], showStructs: new Set(), caveView: false, caveOutline: false, caveY: -50, exp263: false,
     surfSel: new Map(), oceanSel: new Map(), caveSel: new Map(), structSel: new Map() };
 
   fetch('/api/biomes').then(r => r.json()).then(setup).catch(() => {
@@ -317,13 +325,20 @@
     $('stronghold').onchange = () => { $('shWrap').classList.toggle('hidden', !$('stronghold').checked); updateBadges(); };
     $('shDist').oninput = () => $('shVal').textContent = $('shDist').value;
     $('moat').oninput = () => { $('moatVal').textContent = ($('moat').value === '0') ? 'any' : fmt($('moat').value) + ' blocks'; updateBadges(); };
+    const syncCaveDepth = () => $('caveYWrap').classList.toggle('hidden', !(state.caveView || state.caveOutline));
     $('caveView').onchange = () => {
       state.caveView = $('caveView').checked;
-      $('caveYWrap').classList.toggle('hidden', !state.caveView);
+      syncCaveDepth();
       applyLayerAll(); updateBadges();
     };
+    $('caveOutline').onchange = () => {
+      state.caveOutline = $('caveOutline').checked;
+      $('caveLegend').style.display = state.caveOutline ? '' : 'none';
+      syncCaveDepth();
+      applyCaveOverlayAll(); updateBadges();
+    };
     $('caveY').oninput = () => { state.caveY = parseInt($('caveY').value, 10); $('caveYVal').textContent = 'y = ' + state.caveY; };
-    $('caveY').onchange = () => { if (state.caveView) applyLayerAll(); };
+    $('caveY').onchange = () => { if (state.caveView) applyLayerAll(); if (state.caveOutline) applyCaveOverlayAll(); };
     $('importFile').onchange = (e) => { const f = e.target.files[0]; if (f) importSaved(f); e.target.value = ''; };
     renderPresets();
     updateSavedUI();
@@ -360,7 +375,7 @@
       structures: state.structSel.size > 0,
       isolation: (parseInt($('moat').value, 10) || 0) > 0,
       stronghold: $('stronghold').checked,
-      mapdisplay: state.showStructs.size > 0 || state.caveView,
+      mapdisplay: state.showStructs.size > 0 || state.caveView || state.caveOutline,
     };
     document.querySelectorAll('.group.collapsible').forEach(g => g.classList.toggle('active', !!active[g.dataset.sec]));
   }
@@ -637,6 +652,9 @@
     img.addEventListener('pointermove', onMapHover);
     img.addEventListener('pointerleave', hideTip);
     wrap.appendChild(img);
+    const cov = document.createElement('img'); cov.className = 'caveoverlay'; cov.alt = ''; cov.style.display = 'none';
+    wrap.appendChild(cov);
+    applyCaveOverlay(wrap);
 
     const legend = document.createElement('div'); legend.className = 'maplegend';
     wrap._legend = legend;
@@ -745,7 +763,21 @@
     img.src = '/api/map?' + img.dataset.mapq + (state.caveView ? ('&y=' + state.caveY) : '');
   }
   function applyLayerAll() {
-    document.querySelectorAll('.mapwrap img').forEach(setLayer);
+    document.querySelectorAll('.mapwrap img:not(.caveoverlay)').forEach(setLayer);
+  }
+
+  // Cave-biome outline overlay, stacked over the (surface) map at the chosen depth.
+  function applyCaveOverlay(wrap) {
+    const cov = wrap.querySelector('.caveoverlay');
+    if (!cov) return;
+    if (!state.caveOutline) { cov.style.display = 'none'; cov.removeAttribute('src'); return; }
+    const base = wrap.querySelector('img:not(.caveoverlay)');
+    const exp = base && base.dataset.exp263 ? '&exp263=1' : '';
+    cov.src = `/api/caveoverlay?seed=${encodeURIComponent(wrap.dataset.seed)}&step=${wrap.dataset.step}&y=${state.caveY}${exp}`;
+    cov.style.display = '';
+  }
+  function applyCaveOverlayAll() {
+    document.querySelectorAll('.mapwrap').forEach(applyCaveOverlay);
   }
 
   // ---- structure display toggles + map overlays ---------------------------
