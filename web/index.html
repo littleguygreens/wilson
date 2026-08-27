@@ -130,7 +130,7 @@
   .mapwrap { position: relative; margin-top: 10px; line-height: 0; }
   .mapwrap img { margin-top: 0; }
   .card img.caveoverlay { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; background: transparent; border-radius: 10px; pointer-events: none; }
-  .smark { position: absolute; width: 11px; height: 11px; border-radius: 50%; border: 1.5px solid #0b0e12; transform: translate(-50%, -50%); box-shadow: 0 0 0 1px rgba(255,255,255,.45); cursor: help; }
+  .smark { position: absolute; width: 11px; height: 11px; border-radius: 50%; border: 1.5px solid #0b0e12; transform: translate(-50%, -50%); box-shadow: 0 0 0 1px rgba(255,255,255,.45); cursor: pointer; }
   .maplegend { display: none; flex-wrap: wrap; gap: 5px 12px; margin-top: 9px; font-size: 12px; color: var(--muted); }
   .maplegend span { display: inline-flex; align-items: center; }
   .maplegend b { color: var(--text); margin-left: 5px; font-variant-numeric: tabular-nums; }
@@ -820,7 +820,9 @@
         m.style.left = (px / 512 * 100) + '%';
         m.style.top = (py / 512 * 100) + '%';
         m.style.background = st.color;
-        m.title = `${st.label} (${x}, ${z})`;
+        m._label = st.label; m.dataset.sx = x; m.dataset.sz = z;
+        m.addEventListener('pointermove', onStructHover);
+        m.addEventListener('pointerleave', hideTip);
         wrap.appendChild(m);
       });
     });
@@ -898,6 +900,29 @@
       .then((r) => r.json())
       .then((d) => { if (token !== tipReqToken) return; img._biome = prettyBiome(d.name); renderTip(); })
       .catch(() => {});
+  }
+
+  // Structure-marker tooltip: type, coordinates, and the biome at that spot.
+  function onStructHover(e) {
+    const m = e.currentTarget, wrap = m.closest('.mapwrap');
+    const x = parseInt(m.dataset.sx, 10), z = parseInt(m.dataset.sz, 10);
+    tipState = null; // this tip is driven by the marker, not the map cell
+    const t = tip(); t._marker = m;
+    t.style.display = 'block';
+    t.style.left = (e.clientX + 14) + 'px';
+    t.style.top = (e.clientY + 14) + 'px';
+    t.innerHTML = `<b>${m._label}</b> · ${x}, ${z}` + (m._biome ? ` · ${m._biome}` : '');
+    if (m._fetched) return;
+    m._fetched = true;
+    const base = wrap.querySelector('img:not(.caveoverlay)');
+    const exp = base && base.dataset.exp263 ? '&exp263=1' : '';
+    fetch(`/api/biome?seed=${encodeURIComponent(wrap.dataset.seed)}&x=${x}&z=${z}&y=60${exp}`)
+      .then((r) => r.json())
+      .then((d) => {
+        m._biome = prettyBiome(d.name);
+        if (tipEl && tipEl._marker === m) tipEl.innerHTML = `<b>${m._label}</b> · ${x}, ${z} · ${m._biome}`;
+      })
+      .catch(() => { m._fetched = false; });
   }
 </script>
 </body>
