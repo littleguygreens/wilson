@@ -139,6 +139,7 @@ func biomesHandler(w http.ResponseWriter, r *http.Request) {
 		Key   string `json:"key"`
 		Label string `json:"label"`
 		Color string `json:"color"`
+		Exp   bool   `json:"exp,omitempty"` // only shown in experimental 26.3 mode
 	}
 	out := struct {
 		Surface    []opt        `json:"surface"`
@@ -161,7 +162,7 @@ func biomesHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	for _, e := range structCatalog {
-		out.Structures = append(out.Structures, structOpt{Key: e.Key, Label: e.Label, Color: e.Color})
+		out.Structures = append(out.Structures, structOpt{Key: e.Key, Label: e.Label, Color: e.Color, Exp: e.exp263})
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(out)
@@ -182,6 +183,7 @@ func structuresHandler(w http.ResponseWriter, r *http.Request) {
 	if half > 100000 {
 		half = 100000
 	}
+	exp263 := r.URL.Query().Get("exp263") == "1"
 	out := map[string][][2]int{}
 	for _, k := range strings.Split(r.URL.Query().Get("types"), ",") {
 		k = strings.TrimSpace(k)
@@ -189,7 +191,7 @@ func structuresHandler(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		if id, ok := structKeyToID(k); ok {
-			out[k] = structuresAt(uint64(seed), id, half)
+			out[k] = structuresAt(uint64(seed), id, half, exp263)
 		}
 	}
 	w.Header().Set("Content-Type", "application/json")

@@ -404,7 +404,7 @@ void scanner_free(void *s)
 /* ---- the actual filter ----------------------------------------------- */
 
 /* Defined below, in the structures section. */
-static int struct_exists(Generator *g, uint64_t seed, int type,
+static int struct_exists(Generator *g, uint64_t seed, int type, int exp263,
                          int x0, int z0, int x1, int z1);
 
 ScanResult scanner_check(void *s, uint64_t seed, const ScanConfig *cfg)
@@ -515,7 +515,7 @@ ScanResult scanner_check(void *s, uint64_t seed, const ScanConfig *cfg)
         int R = cfg->structRadius > 0 ? cfg->structRadius : cfg->islandRadius;
         int hasInc = 0, incSeen = 0;
         for (int i = 0; i < cfg->nStructures; i++) {
-            int present = struct_exists(g, seed, cfg->structures[i], -R, -R, R, R);
+            int present = struct_exists(g, seed, cfg->structures[i], cfg->exp263, -R, -R, R, R);
             switch (cfg->structMode[i]) {
             case SEL_REQUIRED: if (!present) return r; break;
             case SEL_EXCLUDED: if (present) return r; break;
@@ -589,11 +589,66 @@ int scanner_biome(void *s, uint64_t seed, int x, int y, int z, int exp263)
 /* ---- structures ------------------------------------------------------ */
 /* Note: floordiv() (round toward -inf) comes from cubiomes' rng.h. */
 
+/* Abandoned Camp (26.3). cubiomes has no enum for it, so wilson tags it with a
+ * private sentinel type well above cubiomes' FEATURE_NUM. It is a plain
+ * minecraft:random_spread structure -- the same linear placement Village uses --
+ * so cubiomes' getFeaturePos gives its exact region positions from just
+ * {salt, regionSize=spacing, chunkRange=spacing-separation}. Config from the
+ * 26.3 datapack (abandoned_camp.json): spacing 37, separation 8, salt 91231127.
+ * Viability is its own 18-biome allow-list, checked with biome_263 so Dappled
+ * Forest counts when 26.3 mode is on (and, being 26.3-only, the whole structure
+ * is gated to exp263 on the Go/UI side). */
+#define STRUCT_ABANDONED_CAMP 1000
+static const StructureConfig CAMP_CONF = { 91231127, 37, 29, 0, 0, 0.f };
+
+/* The biomes an Abandoned Camp may spawn in (26.3 structure variants). Ids are
+ * cubiomes' 1.21 ids; B_DAPPLED_FOREST (187) only ever comes back from biome_263
+ * when exp263 is set, so listing it here needs no extra guard. */
+static const int CAMP_BIOMES[] = {
+    bamboo_jungle, birch_forest, cherry_grove, flower_forest, forest, meadow,
+    old_growth_pine_taiga, old_growth_birch_forest, old_growth_spruce_taiga,
+    pale_garden, savanna, snowy_taiga, sparse_jungle, swamp, taiga,
+    windswept_forest, wooded_badlands, B_DAPPLED_FOREST,
+};
+
+static int camp_viable(Generator *g, int exp263, int x, int z)
+{
+    int b = biome_263(g, exp263, x, SURFACE_Y, z);
+    for (int i = 0; i < (int)(sizeof CAMP_BIOMES / sizeof CAMP_BIOMES[0]); i++)
+        if (CAMP_BIOMES[i] == b) return 1;
+    return 0;
+}
+
+/* Region positions and biome viability for one structure type over a block box.
+ * Abandoned Camp uses the private CAMP_CONF + camp_viable; every other type is a
+ * cubiomes StructureType handled by getStructurePos + isViableStructurePos. The
+ * two paths share the same region-grid walk here. Calls back into `hit(x,z)` for
+ * each viable position (early-out when it returns 1 is the caller's job). */
+static int camp_positions(Generator *g, uint64_t seed, int exp263,
+                          int x0, int z0, int x1, int z1, int *out, int max)
+{
+    int reg = CAMP_CONF.regionSize * 16;
+    int cnt = 0;
+    for (int rz = floordiv(z0, reg); rz <= floordiv(z1, reg); rz++)
+        for (int rx = floordiv(x0, reg); rx <= floordiv(x1, reg); rx++) {
+            Pos p = getFeaturePos(CAMP_CONF, seed, rx, rz);
+            if (p.x < x0 || p.x > x1 || p.z < z0 || p.z > z1) continue;
+            if (!camp_viable(g, exp263, p.x, p.z)) continue;
+            if (out && cnt < max) { out[cnt * 2] = p.x; out[cnt * 2 + 1] = p.z; }
+            cnt++;
+            if (!out) return cnt;          /* existence check: first hit is enough */
+        }
+    return cnt;
+}
+
 /* Does a viable instance of `type` exist within the block box? Early-out. The
  * generator must already be seeded for the overworld. */
-static int struct_exists(Generator *g, uint64_t seed, int type,
+static int struct_exists(Generator *g, uint64_t seed, int type, int exp263,
                          int x0, int z0, int x1, int z1)
 {
+    if (type == STRUCT_ABANDONED_CAMP)
+        return camp_positions(g, seed, exp263, x0, z0, x1, z1, NULL, 0) > 0;
+
     StructureConfig sc;
     if (!getStructureConfig(type, MC_VERSION, &sc)) return 0;
     int reg = sc.regionSize * 16;
@@ -608,11 +663,15 @@ static int struct_exists(Generator *g, uint64_t seed, int type,
     return 0;
 }
 
-int scanner_structures(void *s, uint64_t seed, int structType,
+int scanner_structures(void *s, uint64_t seed, int structType, int exp263,
                        int x0, int z0, int x1, int z1, int *out, int max)
 {
     Generator *g = (Generator *)s;
     applySeed(g, DIM_OVERWORLD, seed);
+
+    if (structType == STRUCT_ABANDONED_CAMP)
+        return camp_positions(g, seed, exp263, x0, z0, x1, z1, out, max);
+
     StructureConfig sc;
     if (!getStructureConfig(structType, MC_VERSION, &sc)) return 0;
     int reg = sc.regionSize * 16;

@@ -114,10 +114,17 @@ ScanResult  scanner_inspect(void *s, uint64_t seed, const ScanConfig *cfg);
  * the experimental 26.3 Dappled Forest relabel. */
 int         scanner_biome(void *s, uint64_t seed, int x, int y, int z, int exp263);
 
-/* Finds viable instances of one structure type (a cubiomes StructureType) whose
- * position falls in the block box [x0,z0]-[x1,z1]. Writes up to `max` (x,z)
- * pairs into out[2*max]; returns how many were found (may exceed max). */
-int         scanner_structures(void *s, uint64_t seed, int structType,
+/* wilson's private structure type for the 26.3 Abandoned Camp, which cubiomes
+ * has no enum for. Kept well above cubiomes' FEATURE_NUM so it never collides
+ * with a real StructureType. Only meaningful when exp263 is set. */
+#define STRUCT_ABANDONED_CAMP 1000
+
+/* Finds viable instances of one structure type whose position falls in the block
+ * box [x0,z0]-[x1,z1]. structType is a cubiomes StructureType, or the private
+ * STRUCT_ABANDONED_CAMP; exp263 enables the 26.3 relabels used by the camp's
+ * biome viability. Writes up to `max` (x,z) pairs into out[2*max]; returns how
+ * many were found (may exceed max). */
+int         scanner_structures(void *s, uint64_t seed, int structType, int exp263,
                                int x0, int z0, int x1, int z1, int *out, int max);
 
 /* Fills out[size*size] with biome ids for a square centred on 0,0.

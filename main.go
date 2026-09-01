@@ -169,20 +169,22 @@ func biomeKeyToID(key string) (int32, bool) {
 // marker colour. Mineshafts are omitted: they use a different cubiomes API and
 // are near-ubiquitous underground, so they make a poor filter and a noisy marker.
 type structEntry struct {
-	Key   string
-	Label string
-	Color string
-	id    int32
+	Key    string
+	Label  string
+	Color  string
+	id     int32
+	exp263 bool // only offered in the experimental 26.3 mode
 }
 
 var structCatalog = []structEntry{
-	{"village", "Village", "#f2c14e", int32(C.Village)},
-	{"outpost", "Pillager Outpost", "#e05a4f", int32(C.Outpost)},
-	{"mansion", "Woodland Mansion", "#b07a3f", int32(C.Mansion)},
-	{"monument", "Ocean Monument", "#37b7a8", int32(C.Monument)},
-	{"ruined_portal", "Ruined Portal", "#a878f0", int32(C.Ruined_Portal)},
-	{"ancient_city", "Ancient City", "#4a90d9", int32(C.Ancient_City)},
-	{"trial_chambers", "Trial Chamber", "#e8873a", int32(C.Trial_Chambers)},
+	{"village", "Village", "#f2c14e", int32(C.Village), false},
+	{"outpost", "Pillager Outpost", "#e05a4f", int32(C.Outpost), false},
+	{"mansion", "Woodland Mansion", "#b07a3f", int32(C.Mansion), false},
+	{"monument", "Ocean Monument", "#37b7a8", int32(C.Monument), false},
+	{"ruined_portal", "Ruined Portal", "#a878f0", int32(C.Ruined_Portal), false},
+	{"ancient_city", "Ancient City", "#4a90d9", int32(C.Ancient_City), false},
+	{"trial_chambers", "Trial Chamber", "#e8873a", int32(C.Trial_Chambers), false},
+	{"abandoned_camp", "Abandoned Camp", "#8fbf6f", int32(C.STRUCT_ABANDONED_CAMP), true},
 }
 
 func structKeyToID(key string) (int32, bool) {
@@ -196,12 +198,12 @@ func structKeyToID(key string) (int32, bool) {
 
 // structuresAt returns the (x,z) positions of one structure type within a
 // square of half-size `half` centred on the origin, for a seed.
-func structuresAt(seed uint64, structType int32, half int) [][2]int {
+func structuresAt(seed uint64, structType int32, half int, exp263 bool) [][2]int {
 	s := biomeGenPool.Get().(unsafe.Pointer)
 	defer biomeGenPool.Put(s)
 	const max = 256
 	out := make([]C.int, max*2)
-	n := int(C.scanner_structures(s, C.uint64_t(seed), C.int(structType),
+	n := int(C.scanner_structures(s, C.uint64_t(seed), C.int(structType), boolToC(exp263),
 		C.int(-half), C.int(-half), C.int(half), C.int(half),
 		(*C.int)(unsafe.Pointer(&out[0])), C.int(max)))
 	if n > max {

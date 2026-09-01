@@ -90,9 +90,16 @@ wilson embeds the full 26.3 climate entry list (`entries263.h`, generated from
 the decompiled world-gen) and does an exact nearest-entry check, gated by a
 cheap distance to the sulfur box so it only runs on the few cave cells where
 sulfur could win. It was validated cell-for-cell against that entry list.
-The 26.3 **Abandoned Camp** structure is not modelled yet -- structures need
-their placement config (spacing/separation/salt) and biome list, which aren't
-in the biome decompile.
+
+Finally it adds the 26.3 **Abandoned Camp** structure -- a searchable filter and
+a map marker like the other structures. Abandoned Camp uses Minecraft's
+`random_spread` placement (spacing 37, separation 8, salt 91231127 from the 26.3
+datapack), the very same linear scheme Villages use, so cubiomes' own
+`getFeaturePos` gives its exact positions with no new generator -- verified to be
+byte-identical to cubiomes' Village placement path. A camp is only kept where the
+surface biome is one of its 18 allowed biomes (which include Dappled Forest), so
+the check reuses the 26.3-aware biome lookup. cubiomes has no id for it, so wilson
+tags it with a private structure type; the whole feature is gated to 26.3 mode.
 
 ## Saving finds
 

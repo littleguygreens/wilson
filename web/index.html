@@ -311,21 +311,22 @@
     updateSizeHint();
     state.surfaceOpts = d.surface;
     state.caveOpts = d.cave;
+    state.structs = d.structures;
     buildExpChips();
     $('exp263').onchange = () => {
       state.exp263 = $('exp263').checked;
       if (!state.exp263) {
         state.surfSel.forEach((v, k) => { if (isExpKey('surface', k)) state.surfSel.delete(k); });
         state.caveSel.forEach((v, k) => { if (isExpKey('cave', k)) state.caveSel.delete(k); });
+        state.structSel.forEach((v, k) => { if (isExpKey('struct', k)) state.structSel.delete(k); });
+        state.structs.forEach((s) => { if (s.exp) state.showStructs.delete(s.key); });
       }
       buildExpChips();
       applyLayerAll();
+      refreshAllOverlays();
       updateBadges();
     };
     buildTriChips('ocean', d.ocean, state.oceanSel);
-    buildTriChips('reqStructs', d.structures, state.structSel);
-    state.structs = d.structures;
-    buildShowStructs(d.structures);
     $('stronghold').onchange = () => { $('shWrap').classList.toggle('hidden', !$('stronghold').checked); updateBadges(); };
     $('shDist').oninput = () => $('shVal').textContent = $('shDist').value;
     $('moat').oninput = () => { $('moatVal').textContent = ($('moat').value === '0') ? 'any' : fmt($('moat').value) + ' blocks'; updateBadges(); };
@@ -494,12 +495,17 @@
   }
   // Surface/cave chips include experimental (26.3) biomes only when that mode is on.
   function isExpKey(cat, key) {
-    const opts = cat === 'cave' ? state.caveOpts : state.surfaceOpts;
+    const opts = cat === 'cave' ? state.caveOpts : cat === 'struct' ? state.structs : state.surfaceOpts;
     return ((opts || []).find(o => o.key === key) || {}).exp === true;
   }
   function buildExpChips() {
     buildTriChips('surface', state.surfaceOpts.filter(o => !o.exp || state.exp263), state.surfSel);
     buildTriChips('cave', state.caveOpts.filter(o => !o.exp || state.exp263), state.caveSel);
+    // state.structs stays the full list (so saved 26.3 cards still render their
+    // camp markers); only the interactive chips are gated to the current mode.
+    const structs = (state.structs || []).filter(o => !o.exp || state.exp263);
+    buildTriChips('reqStructs', structs, state.structSel);
+    buildShowStructs(structs);
   }
   // Tri-state chips: each cycles off -> include -> require -> exclude -> off,
   // storing the state in selMap (key -> 'inc'|'req'|'exc').
@@ -652,6 +658,7 @@
 
     const wrap = document.createElement('div'); wrap.className = 'mapwrap';
     wrap.dataset.seed = m.seed; wrap.dataset.step = m.step;
+    wrap.dataset.exp263 = m.exp263 ? '1' : '';
     const img = document.createElement('img'); img.loading = 'lazy';
     img.alt = 'map for seed ' + m.seed;
     img.dataset.seed = m.seed; img.dataset.step = m.step; img.dataset.mapq = q.toString();
@@ -793,6 +800,7 @@
     const box = $('showStructs'); box.innerHTML = '';
     list.forEach((st) => {
       const c = document.createElement('span'); c.className = 'chip'; c.dataset.key = st.key;
+      if (state.showStructs.has(st.key)) c.classList.add('on');
       c.innerHTML = `<span class="sw2" style="background:${st.color}"></span>${st.label}`;
       c.onclick = () => {
         c.classList.toggle('on');
@@ -808,7 +816,8 @@
     const step = parseInt(wrap.dataset.step, 10) || 4;
     const half = 256 * step; // the map spans +/- 256 pixels * step blocks
     const types = state.structs.map((s) => s.key).join(',');
-    fetch(`/api/structures?seed=${encodeURIComponent(wrap.dataset.seed)}&types=${types}&half=${half}`)
+    const exp = wrap.dataset.exp263 ? '&exp263=1' : '';
+    fetch(`/api/structures?seed=${encodeURIComponent(wrap.dataset.seed)}&types=${types}&half=${half}${exp}`)
       .then((r) => r.json())
       .then((d) => { wrap._structs = d; cb && cb(); })
       .catch(() => {});
