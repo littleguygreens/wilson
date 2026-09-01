@@ -517,8 +517,9 @@ func palette() [256]color.RGBA {
 			}
 		}
 		// Dappled Forest (187) and Sulfur Caves (188) have no cubiomes colour;
-		// give them distinct hues (khaki, sulphur yellow) for the maps.
-		paletteData[dappledForestID] = color.RGBA{R: 176, G: 156, B: 92, A: 255}
+		// give them distinct hues for the maps. Dappled Forest is a bright red so
+		// it can't be mistaken for the grey-tan of stony shore at a glance.
+		paletteData[dappledForestID] = color.RGBA{R: 230, G: 57, B: 53, A: 255}
 		paletteData[sulfurCavesID] = color.RGBA{R: 227, G: 206, B: 58, A: 255}
 	})
 	return paletteData
