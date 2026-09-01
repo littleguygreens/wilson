@@ -113,12 +113,16 @@ const sulfurCavesID int32 = 188
 var catalog = []biomeEntry{
 	// Island surface biomes.
 	{"surface", "plains", "Plains", int32(C.plains), false},
+	{"surface", "snowy_plains", "Snowy Plains", int32(C.snowy_plains), false},
 	{"surface", "forest", "Forest", int32(C.forest), false},
+	{"surface", "flower_forest", "Flower Forest", int32(C.flower_forest), false},
 	{"surface", "birch_forest", "Birch Forest", int32(C.birch_forest), false},
 	{"surface", "dark_forest", "Dark Forest", int32(C.dark_forest), false},
 	{"surface", "taiga", "Taiga", int32(C.taiga), false},
 	{"surface", "snowy_taiga", "Snowy Taiga", int32(C.snowy_taiga), false},
+	{"surface", "old_growth_pine_taiga", "Old Growth Pine Taiga", int32(C.old_growth_pine_taiga), false},
 	{"surface", "jungle", "Jungle", int32(C.jungle), false},
+	{"surface", "sparse_jungle", "Sparse Jungle", int32(C.sparse_jungle), false},
 	{"surface", "bamboo_jungle", "Bamboo Jungle", int32(C.bamboo_jungle), false},
 	{"surface", "savanna", "Savanna", int32(C.savanna), false},
 	{"surface", "desert", "Desert", int32(C.desert), false},
@@ -133,9 +137,11 @@ var catalog = []biomeEntry{
 	{"surface", "grove", "Grove", int32(C.grove), false},
 	{"surface", "snowy_slopes", "Snowy Slopes", int32(C.snowy_slopes), false},
 	{"surface", "windswept_hills", "Windswept Hills", int32(C.windswept_hills), false},
+	{"surface", "windswept_forest", "Windswept Forest", int32(C.windswept_forest), false},
 	{"surface", "jagged_peaks", "Jagged Peaks", int32(C.jagged_peaks), false},
 	{"surface", "frozen_peaks", "Frozen Peaks", int32(C.frozen_peaks), false},
 	{"surface", "stony_peaks", "Stony Peaks", int32(C.stony_peaks), false},
+	{"surface", "stony_shore", "Stony Shore", int32(C.stony_shore), false},
 
 	// Allowed ocean types for the isolation rings.
 	{"ocean", "ocean", "Ocean", int32(C.ocean), false},
