@@ -82,8 +82,17 @@ humidity band 0, weirdness >= 0. So wilson keeps cubiomes' fast, exact 1.21
 generator and *relabels* just that cell (`surface_biome` in `scan.c`). This was
 verified against chunkbase: for seed `1728186647319`, wilson reports Dappled
 Forest at (1250, -100) and (1250, 250), matching the map. When the mode is off,
-generation is byte-identical to plain 1.21. Other 26.3-only biomes (e.g. sulfur
-caves) are not modelled yet.
+generation is byte-identical to plain 1.21.
+
+The mode also adds **Sulfur Caves** as a selectable cave biome. Sulfur sits at
+an extreme-weirdness climate box where a simple box test is not enough, so
+wilson embeds the full 26.3 climate entry list (`entries263.h`, generated from
+the decompiled world-gen) and does an exact nearest-entry check, gated by a
+cheap distance to the sulfur box so it only runs on the few cave cells where
+sulfur could win. It was validated cell-for-cell against that entry list.
+The 26.3 **Abandoned Camp** structure is not modelled yet -- structures need
+their placement config (spacing/separation/salt) and biome list, which aren't
+in the biome decompile.
 
 ## Saving finds
 
