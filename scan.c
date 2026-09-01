@@ -3,6 +3,7 @@
 #include "generator.h"
 #include "finders.h"
 #include "util.h"
+#include "entries263.h"   /* embedded 26.3 climate entry list (Dappled + Sulfur) */
 
 #include <stdlib.h>
 #include <string.h>
@@ -36,11 +37,52 @@ static int biome_at_block(Generator *g, int bx, int by, int bz)
 #define DAP_H_LO  (-10000)  /* humidities[0]   = span(-1.0, -0.35) */
 #define DAP_H_HI  (-3500)
 
-/* Surface-biome identity at a block, honouring the 26.3 relabel when exp263 is
- * set. Only used where the biome *name* matters (island biome gathering, the
- * hover tooltip, the map). Geometry/ocean/cave lookups keep plain biome_at_block
+/* Sulfur Caves (26.3): a new underground biome at continentalness [-1900,5500],
+ * erosion [4500,10000], depth [2000,9000], weirdness [-11000,-8500]. Unlike
+ * Dappled Forest it can't be a simple box test -- its nearest-neighbour
+ * territory reaches beyond the box at extreme weirdness -- so we compute the
+ * squared distance to the box as a cheap GATE: sulfur can only be the nearest
+ * entry where this is small. The box includes depth, so the gate only fires at
+ * cave depths, keeping the surface pass fast. */
+static long sulfur_box_dist(const int64_t np[6])
+{
+    static const int lo[6] = { -32768, -32768, -1900,  4500, 2000, -11000 };
+    static const int hi[6] = {  32767,  32767,  5500, 10000, 9000,  -8500 };
+    long ds = 0;
+    for (int i = 0; i < 6; i++) {
+        long a = np[i] - hi[i], b = lo[i] - np[i];
+        long d = a > 0 ? a : b > 0 ? b : 0;
+        ds += d * d;
+    }
+    return ds;
+}
+#define SULFUR_GATE 25000000L   /* >2.5x the max distance of any real sulfur cell */
+
+/* Exact nearest-entry biome over the full 26.3 climate table. Only called for
+ * the few cave points inside the sulfur gate, to confirm sulfur beats the 1.21
+ * winner. Ties resolve to the first (earliest-inserted) entry, matching Mojang. */
+static int nearest_263(const int64_t np[6])
+{
+    long best = -1; int bb = 0;
+    for (int k = 0; k < N_ENTRIES_263; k++) {
+        const short *e = entries263[k];
+        long ds = 0;
+        for (int i = 0; i < 6; i++) {
+            long a = np[i] - e[2*i+1], b = e[2*i] - np[i];
+            long d = a > 0 ? a : b > 0 ? b : 0;
+            ds += d * d;
+        }
+        if (best < 0 || ds < best) { best = ds; bb = e[12]; }
+    }
+    return bb;
+}
+
+/* Biome identity at a block, honouring the 26.3 relabels when exp263 is set:
+ * Dappled Forest (cheap surface cell test) and Sulfur Caves (gated exact
+ * nearest-entry). Used where the biome *name* matters (island biome gathering,
+ * the hover tooltip, the map). Geometry/ocean lookups keep plain biome_at_block
  * so island shape is byte-identical to 1.21. */
-static int surface_biome(Generator *g, int exp263, int bx, int by, int bz)
+static int biome_263(Generator *g, int exp263, int bx, int by, int bz)
 {
     if (!exp263)
         return getBiomeAt(g, 4, bx >> 2, by >> 2, bz >> 2);
@@ -51,6 +93,8 @@ static int surface_biome(Generator *g, int exp263, int bx, int by, int bz)
         np[NP_HUMIDITY]    >= DAP_H_LO && np[NP_HUMIDITY]    <= DAP_H_HI &&
         np[NP_WEIRDNESS]   >= 0)
         return B_DAPPLED_FOREST;
+    if (sulfur_box_dist(np) <= SULFUR_GATE && nearest_263(np) == B_SULFUR_CAVES)
+        return B_SULFUR_CAVES;
     return b;
 }
 
@@ -327,11 +371,11 @@ static int gather_island(Generator *g, const ScanConfig *cfg,
             int bx = (i - c) * step, bz = (j - c) * step;
             if (bx * bx + bz * bz > R * R)
                 continue;
-            int surf = surface_biome(g, cfg->exp263, bx, SURFACE_Y, bz);
+            int surf = biome_263(g, cfg->exp263, bx, SURFACE_Y, bz);
             for (int k = 0; k < cfg->nSurface; k++)
                 if (cfg->surface[k] == surf) *surfaceSeen |= (1u << k);
             if (cfg->nCave > 0) {
-                int cav = biome_at_block(g, bx, CAVE_Y, bz);
+                int cav = biome_263(g, cfg->exp263, bx, CAVE_Y, bz);
                 for (int k = 0; k < cfg->nCave; k++)
                     if (cfg->cave[k] == cav) { caveHits[k]++; (*caveTotal)++; }
             }
@@ -539,7 +583,7 @@ int scanner_biome(void *s, uint64_t seed, int x, int y, int z, int exp263)
 {
     Generator *g = (Generator *)s;
     applySeed(g, DIM_OVERWORLD, seed);
-    return surface_biome(g, exp263, x, y, z);
+    return biome_263(g, exp263, x, y, z);
 }
 
 /* ---- structures ------------------------------------------------------ */
@@ -599,7 +643,7 @@ void scanner_biome_grid(void *s, uint64_t seed, int size, int step,
         for (int i = 0; i < size; i++) {
             int bx = (i - half) * step;
             int bz = (j - half) * step;
-            out[j * size + i] = surface_biome(g, exp263, bx, y, bz);
+            out[j * size + i] = biome_263(g, exp263, bx, y, bz);
         }
     }
 }

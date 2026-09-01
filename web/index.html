@@ -232,7 +232,8 @@
         Outlines at this depth:
         <span style="color:#55d16a">■ Lush</span> ·
         <span style="color:#d18a3a">■ Dripstone</span> ·
-        <span style="color:#35c9d6">■ Deep Dark</span>
+        <span style="color:#35c9d6">■ Deep Dark</span> ·
+        <span style="color:#e3ce3a">■ Sulfur</span>
       </div>
       <div id="caveYWrap" class="hidden" style="margin-top:10px">
         <label class="fl">Depth: <b id="caveYVal">y = -50</b></label>
@@ -309,16 +310,19 @@
     });
     updateSizeHint();
     state.surfaceOpts = d.surface;
-    buildSurfaceChips();
+    state.caveOpts = d.cave;
+    buildExpChips();
     $('exp263').onchange = () => {
       state.exp263 = $('exp263').checked;
-      if (!state.exp263) state.surfSel.forEach((v, k) => { if (isExpKey(k)) state.surfSel.delete(k); });
-      buildSurfaceChips();
+      if (!state.exp263) {
+        state.surfSel.forEach((v, k) => { if (isExpKey('surface', k)) state.surfSel.delete(k); });
+        state.caveSel.forEach((v, k) => { if (isExpKey('cave', k)) state.caveSel.delete(k); });
+      }
+      buildExpChips();
       applyLayerAll();
       updateBadges();
     };
     buildTriChips('ocean', d.ocean, state.oceanSel);
-    buildTriChips('cave', d.cave, state.caveSel);
     buildTriChips('reqStructs', d.structures, state.structSel);
     state.structs = d.structures;
     buildShowStructs(d.structures);
@@ -463,8 +467,9 @@
   function applyPreset(p) {
     setSize(p.size || 'M');
     state.exp263 = !!p.exp263; $('exp263').checked = state.exp263;
-    state.surfSel = migrateSel(p.surf, p.surface, p.surfaceAll); buildSurfaceChips();
-    state.caveSel = migrateSel(Array.isArray(p.cave) ? null : p.cave, Array.isArray(p.cave) ? p.cave : null, p.caveAll); paintTri('cave', state.caveSel);
+    state.surfSel = migrateSel(p.surf, p.surface, p.surfaceAll);
+    state.caveSel = migrateSel(Array.isArray(p.cave) ? null : p.cave, Array.isArray(p.cave) ? p.cave : null, p.caveAll);
+    buildExpChips();
     state.structSel = migrateSel(p.struct, p.structures, false); paintTri('reqStructs', state.structSel);
     state.oceanSel = migrateSel(Array.isArray(p.ocean) ? null : p.ocean, Array.isArray(p.ocean) ? p.ocean : null, false); paintTri('ocean', state.oceanSel);
     $('minCave').value = p.minCave || 3;
@@ -487,11 +492,14 @@
     [...$('sizes').children].forEach(c => c.classList.toggle('on', c.dataset.key === key));
     updateSizeHint();
   }
-  // Surface chips include experimental (26.3) biomes only when that mode is on.
-  function isExpKey(key) { return (state.surfaceOpts.find(o => o.key === key) || {}).exp === true; }
-  function buildSurfaceChips() {
-    const opts = state.surfaceOpts.filter(o => !o.exp || state.exp263);
-    buildTriChips('surface', opts, state.surfSel);
+  // Surface/cave chips include experimental (26.3) biomes only when that mode is on.
+  function isExpKey(cat, key) {
+    const opts = cat === 'cave' ? state.caveOpts : state.surfaceOpts;
+    return ((opts || []).find(o => o.key === key) || {}).exp === true;
+  }
+  function buildExpChips() {
+    buildTriChips('surface', state.surfaceOpts.filter(o => !o.exp || state.exp263), state.surfSel);
+    buildTriChips('cave', state.caveOpts.filter(o => !o.exp || state.exp263), state.caveSel);
   }
   // Tri-state chips: each cycles off -> include -> require -> exclude -> off,
   // storing the state in selMap (key -> 'inc'|'req'|'exc').

@@ -104,6 +104,10 @@ type biomeEntry struct {
 // it lives just past the enum. Keep it in sync with B_DAPPLED_FOREST in scan.c.
 const dappledForestID int32 = 187
 
+// sulfurCavesID is the 26.3 Sulfur Caves biome id (synthesised by scan.c's
+// gated relabel). Keep in sync with B_SULFUR_CAVES in entries263.h.
+const sulfurCavesID int32 = 188
+
 // catalog is the authoritative list of selectable biomes. The web menu is built
 // from it (keys + labels), and search requests map keys back to ids through it.
 var catalog = []biomeEntry{
@@ -148,6 +152,7 @@ var catalog = []biomeEntry{
 	{"cave", "lush_caves", "Lush Caves", int32(C.lush_caves), false},
 	{"cave", "dripstone_caves", "Dripstone Caves", int32(C.dripstone_caves), false},
 	{"cave", "deep_dark", "Deep Dark", int32(C.deep_dark), false},
+	{"cave", "sulfur_caves", "Sulfur Caves", sulfurCavesID, true},
 }
 
 // biomeKeyToID resolves a UI key to its cubiomes biome id.
@@ -509,9 +514,10 @@ func palette() [256]color.RGBA {
 				A: 255,
 			}
 		}
-		// Dappled Forest (synthesised id 187) has no cubiomes colour; give it a
-		// muted late-autumn khaki so it reads distinctly on the map.
+		// Dappled Forest (187) and Sulfur Caves (188) have no cubiomes colour;
+		// give them distinct hues (khaki, sulphur yellow) for the maps.
 		paletteData[dappledForestID] = color.RGBA{R: 176, G: 156, B: 92, A: 255}
+		paletteData[sulfurCavesID] = color.RGBA{R: 227, G: 206, B: 58, A: 255}
 	})
 	return paletteData
 }
@@ -635,6 +641,8 @@ func caveOverlayColor(id int) (color.RGBA, bool) {
 		return color.RGBA{0xd1, 0x8a, 0x3a, 0xff}, true
 	case int(C.deep_dark):
 		return color.RGBA{0x35, 0xc9, 0xd6, 0xff}, true
+	case int(sulfurCavesID):
+		return color.RGBA{0xe3, 0xce, 0x3a, 0xff}, true
 	}
 	return color.RGBA{}, false
 }
@@ -694,9 +702,12 @@ func biomeAt(seed uint64, x, y, z int, exp263 bool) (int, string) {
 	defer biomeGenPool.Put(s)
 	id := int(C.scanner_biome(s, C.uint64_t(seed), C.int(x), C.int(y), C.int(z), boolToC(exp263)))
 	var name string
-	if id == int(dappledForestID) {
-		name = "dappled_forest" // synthesised id; cubiomes' biome2str can't name it
-	} else {
+	switch int32(id) {
+	case dappledForestID:
+		name = "dappled_forest" // synthesised ids; cubiomes' biome2str can't name them
+	case sulfurCavesID:
+		name = "sulfur_caves"
+	default:
 		name = C.GoString(C.biome2str(C.MC_1_21, C.int(id)))
 	}
 	if name == "" {
