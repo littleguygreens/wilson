@@ -64,6 +64,12 @@ parameters:
   the minimum open-sea gap (moat) between the spawn island and the nearest
   other land; higher values are more isolated and rarer. The search window
   grows to fit the requested moat.
+- **Rivers** — an optional toggle to reject a spawn island a river cuts clean
+  through, sea to sea, which otherwise reads as two islands. Rivers normally
+  count as land (only ocean isolates), so this re-runs the island flood fill with
+  river cells as barriers and rejects the seed when a substantial share of the
+  land is stranded on the far side. A river that only reaches partway in and
+  dead-ends leaves the land joined around its tip, so it is kept.
 - **Stronghold** — optionally require the nearest first-ring stronghold to sit
   on the island's land within a chosen distance. Realistic only at Huge/XXL,
   since strongholds never generate within ~1,280 blocks of spawn.

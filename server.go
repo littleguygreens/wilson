@@ -265,6 +265,7 @@ func configFromQuery(r *http.Request) Config {
 	}
 
 	cfg.Exp263 = q.Get("exp263") == "1"
+	cfg.RejectDividingRiver = q.Get("noRiver") == "1"
 
 	// Full-enclosure flood fill is always on: results are never peninsulas.
 	cfg.RequireEnclosed = true

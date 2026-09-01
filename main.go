@@ -81,6 +81,8 @@ type Config struct {
 	MinIslandCells  int
 	MinMoat         int
 
+	RejectDividingRiver bool
+
 	Structures   []int32
 	StructMode   []int32
 	StructRadius int
@@ -261,6 +263,7 @@ func toCConfig(cfg Config) C.ScanConfig {
 	c.islandStep = C.int(cfg.IslandStep)
 	c.minIslandCells = C.int(cfg.MinIslandCells)
 	c.minMoat = C.int(cfg.MinMoat)
+	c.rejectDividingRiver = boolToC(cfg.RejectDividingRiver)
 
 	c.nStructures = putList(&c.structures, cfg.Structures)
 	putList(&c.structMode, cfg.StructMode)
@@ -295,10 +298,11 @@ func main() {
 	oceanInc := flag.String("oceanInc", "", "comma-separated included ocean types for -check (whitelist)")
 	oceanReq := flag.String("oceanReq", "", "comma-separated required ocean types for -check")
 	oceanExc := flag.String("oceanExc", "", "comma-separated excluded ocean types for -check")
+	noRiver := flag.Bool("noRiver", false, "reject islands split sea-to-sea by a river, for -check")
 	flag.Parse()
 
 	if *check != "" {
-		runCheck(*check, *size, *moat, *oceanReq, *oceanInc, *oceanExc)
+		runCheck(*check, *size, *moat, *oceanReq, *oceanInc, *oceanExc, *noRiver)
 		return
 	}
 
@@ -367,7 +371,7 @@ func repeatMode(mode int32, n int) []int32 {
 // whether it would match. Handy for confirming a build behaves as expected:
 //
 //	./wilson -check <seed> -size L [-moat 300]
-func runCheck(seedStr, size string, moat int, oceanReq, oceanInc, oceanExc string) {
+func runCheck(seedStr, size string, moat int, oceanReq, oceanInc, oceanExc string, noRiver bool) {
 	seed, err := strconv.ParseInt(seedStr, 10, 64)
 	if err != nil {
 		log.Fatalf("bad seed %q: %v", seedStr, err)
@@ -375,6 +379,7 @@ func runCheck(seedStr, size string, moat int, oceanReq, oceanInc, oceanExc strin
 	cfg := geometryForSize(size)
 	cfg.RequireEnclosed = true
 	cfg.MinMoat = moat
+	cfg.RejectDividingRiver = noRiver
 	cfg.Ocean, cfg.OceanMode = triSelection(oceanReq, oceanInc, oceanExc, biomeKeyToID)
 	if moat > 0 { // mirror the server's window growth
 		if needed := cfg.IslandRadius + moat + 4*cfg.IslandStep; needed > cfg.IslandWindow {

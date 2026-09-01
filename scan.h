@@ -68,6 +68,13 @@ typedef struct {
      * enclosure (any gap). Larger values dial in more isolation (rarer). */
     int minMoat;
 
+    /* Reject an island split clean through by a river. Rivers otherwise count as
+     * land, so a channel running sea-to-sea passes as one island though it looks
+     * like two. When set, the spawn island is re-flood-filled with river cells as
+     * barriers; if a substantial share of its land is cut off, the seed is
+     * rejected. Uses the same window/step as the enclosure check. */
+    int rejectDividingRiver;
+
     /* Structures (cubiomes StructureType) and their modes. Presence = a viable
      * instance within structRadius blocks of spawn. */
     int structures[SCAN_MAX_LIST];

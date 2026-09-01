@@ -212,6 +212,12 @@
       </div>
     </div>
 
+    <div class="group collapsible" data-sec="rivers">
+      <div class="glabel"><span>Rivers</span></div>
+      <label class="sw"><input type="checkbox" id="noRiver"> Exclude islands split by a river</label>
+      <div class="hint">Rejects a spawn island a river cuts clean through, sea-to-sea, so it looks like two islands. A river that only reaches partway in is kept.</div>
+    </div>
+
     <div class="group collapsible" data-sec="stronghold">
       <div class="glabel"><span>Stronghold</span></div>
       <label class="sw"><input type="checkbox" id="stronghold"> First stronghold on the island</label>
@@ -328,6 +334,7 @@
     };
     buildTriChips('ocean', d.ocean, state.oceanSel);
     $('stronghold').onchange = () => { $('shWrap').classList.toggle('hidden', !$('stronghold').checked); updateBadges(); };
+    $('noRiver').onchange = updateBadges;
     $('shDist').oninput = () => $('shVal').textContent = $('shDist').value;
     $('moat').oninput = () => { $('moatVal').textContent = ($('moat').value === '0') ? 'any' : fmt($('moat').value) + ' blocks'; updateBadges(); };
     const syncCaveDepth = () => $('caveYWrap').classList.toggle('hidden', !(state.caveView || state.caveOutline));
@@ -353,7 +360,7 @@
 
   // ---- collapsible sections + active badges -------------------------------
   const COLLAPSE_KEY = 'wilson.collapsed';
-  const DEFAULT_COLLAPSED = ['ocean', 'caves', 'structures', 'isolation', 'stronghold', 'mapdisplay'];
+  const DEFAULT_COLLAPSED = ['ocean', 'caves', 'structures', 'isolation', 'rivers', 'stronghold', 'mapdisplay'];
 
   function setupCollapsibles() {
     let saved = null;
@@ -379,6 +386,7 @@
       caves: state.caveSel.size > 0,
       structures: state.structSel.size > 0,
       isolation: (parseInt($('moat').value, 10) || 0) > 0,
+      rivers: $('noRiver').checked,
       stronghold: $('stronghold').checked,
       mapdisplay: state.showStructs.size > 0 || state.caveView || state.caveOutline,
     };
@@ -448,6 +456,7 @@
       struct: objFromMap(state.structSel),
       minCave: parseInt($('minCave').value, 10) || 3,
       moat: parseInt($('moat').value, 10) || 0,
+      noRiver: $('noRiver').checked ? 1 : 0,
       stronghold: $('stronghold').checked ? 1 : 0,
       shDist: parseInt($('shDist').value, 10) || 1700,
       n: parseInt($('n').value, 10) || 5,
@@ -475,6 +484,7 @@
     state.oceanSel = migrateSel(Array.isArray(p.ocean) ? null : p.ocean, Array.isArray(p.ocean) ? p.ocean : null, false); paintTri('ocean', state.oceanSel);
     $('minCave').value = p.minCave || 3;
     $('moat').value = p.moat || 0; $('moat').oninput();
+    $('noRiver').checked = !!p.noRiver;
     $('stronghold').checked = !!p.stronghold; $('shWrap').classList.toggle('hidden', !$('stronghold').checked);
     $('shDist').value = p.shDist || 1700; $('shDist').oninput();
     $('n').value = p.n || 5;
@@ -575,6 +585,7 @@
     setTri('struct', state.structSel);
     if ($('stronghold').checked) { p.set('stronghold', '1'); p.set('shDist', $('shDist').value); }
     if ($('moat').value !== '0') p.set('moat', $('moat').value);
+    if ($('noRiver').checked) p.set('noRiver', '1');
     if (state.exp263) p.set('exp263', '1');
 
     $('results').innerHTML = '';

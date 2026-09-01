@@ -119,6 +119,14 @@ static int is_ocean(int id)
     }
 }
 
+/* River biomes. They run through land as narrow channels; wilson normally treats
+ * them as land (only true ocean isolates an island), but the dividing-river check
+ * needs to tell them apart. */
+static int is_river(int id)
+{
+    return id == river || id == frozen_river;
+}
+
 /* Applies the ocean-type tri-state over the whole surrounding sea. Oceans use a
  * whitelist rule, not the "at least one" rule the land biomes use: the sea is
  * entirely ocean, so the point is to constrain *which* ocean types may make it
@@ -310,6 +318,99 @@ static void island_metrics(Generator *g, int window, int step,
     free(queue);
     free(dist);
     free(cstk);
+}
+
+/* Detects a river that cuts the spawn island clean through, sea-to-sea, so it
+ * reads as two islands. The island is the non-ocean blob 8-connected to spawn
+ * (rivers count as part of it, exactly as the enclosure check sees it). Treating
+ * river cells as barriers, we re-flood the land-only cells from spawn and measure
+ * the largest chunk of island land left unreachable: a river running fully across
+ * strands one side, while a river that only poks in from the sea and dead-ends
+ * leaves the land joined around its tip. We flag the seed only when the stranded
+ * side is a substantial share of the island (a fifth), so a channel shaving a
+ * small nub off the coast doesn't reject an otherwise good island. Centred on
+ * (0,0), which an earlier check has already confirmed is land. Returns 1 to
+ * reject. */
+static int river_divides(Generator *g, int window, int step)
+{
+    if (window <= 0 || step <= 0)
+        return 0;
+    int n = 2 * (window / step) + 1;
+    int c = n / 2;
+
+    unsigned char *cell = malloc((size_t)n * n);   /* 0 ocean, 1 land, 2 river */
+    unsigned char *mark = malloc((size_t)n * n);   /* 0 outside, 1 blob, 2 spawn land, 3 counted */
+    int *stk = malloc(sizeof(int) * (size_t)n * n);
+    if (!cell || !mark || !stk) { free(cell); free(mark); free(stk); return 0; }
+
+    for (int j = 0; j < n; j++)
+        for (int i = 0; i < n; i++) {
+            int bx = (i - c) * step, bz = (j - c) * step;
+            int b = biome_at_block(g, bx, SURFACE_Y, bz);
+            cell[j * n + i] = is_ocean(b) ? 0 : (is_river(b) ? 2 : 1);
+        }
+
+    if (cell[c * n + c] != 1) {                     /* spawn cell not plain land */
+        free(cell); free(mark); free(stk);
+        return 0;
+    }
+
+    /* Blob: land + river 8-connected to spawn (the island as enclosure sees it).
+     * Count its land cells along the way. */
+    memset(mark, 0, (size_t)n * n);
+    int top = 0, totalLand = 0;
+    mark[c * n + c] = 1; stk[top++] = c * n + c;
+    while (top > 0) {
+        int idx = stk[--top], i = idx % n, j = idx / n;
+        if (cell[idx] == 1) totalLand++;
+        for (int dj = -1; dj <= 1; dj++)
+            for (int di = -1; di <= 1; di++) {
+                if (!di && !dj) continue;
+                int ni = i + di, nj = j + dj;
+                if (ni < 0 || nj < 0 || ni >= n || nj >= n) continue;
+                int k = nj * n + ni;
+                if (!mark[k] && cell[k] != 0) { mark[k] = 1; stk[top++] = k; }
+            }
+    }
+
+    /* Main land: blob land cells 8-connected to spawn with rivers as barriers. */
+    top = 0; mark[c * n + c] = 2; stk[top++] = c * n + c;
+    int mainLand = 1;
+    while (top > 0) {
+        int idx = stk[--top], i = idx % n, j = idx / n;
+        for (int dj = -1; dj <= 1; dj++)
+            for (int di = -1; di <= 1; di++) {
+                if (!di && !dj) continue;
+                int ni = i + di, nj = j + dj;
+                if (ni < 0 || nj < 0 || ni >= n || nj >= n) continue;
+                int k = nj * n + ni;
+                if (mark[k] == 1 && cell[k] == 1) { mark[k] = 2; stk[top++] = k; mainLand++; }
+            }
+    }
+
+    /* Largest land component stranded on the far side of a river. */
+    int worst = 0;
+    for (int s = 0; s < n * n && worst * 5 < totalLand; s++) {
+        if (mark[s] != 1 || cell[s] != 1) continue;   /* unreached blob land */
+        top = 0; mark[s] = 3; stk[top++] = s;
+        int size = 1;
+        while (top > 0) {
+            int idx = stk[--top], i = idx % n, j = idx / n;
+            for (int dj = -1; dj <= 1; dj++)
+                for (int di = -1; di <= 1; di++) {
+                    if (!di && !dj) continue;
+                    int ni = i + di, nj = j + dj;
+                    if (ni < 0 || nj < 0 || ni >= n || nj >= n) continue;
+                    int k = nj * n + ni;
+                    if (mark[k] == 1 && cell[k] == 1) { mark[k] = 3; stk[top++] = k; size++; }
+                }
+        }
+        if (size > worst) worst = size;
+    }
+
+    free(cell); free(mark); free(stk);
+    (void)mainLand;
+    return totalLand > 0 && worst * 5 >= totalLand;   /* >= 20% stranded -> reject */
 }
 
 /* One pass over the island footprint at gridStep resolution. Counts land over
@@ -508,6 +609,12 @@ ScanResult scanner_check(void *s, uint64_t seed, const ScanConfig *cfg)
         r.islandCells = cells;
         r.moatBlocks = moat;
     }
+
+    /* 5b-2. Reject islands a river cuts sea-to-sea (they look like two islands).
+     *       Uses the enclosure window/step, so it needs those set. */
+    if (cfg->rejectDividingRiver && cfg->islandWindow > 0 && cfg->islandStep > 0 &&
+        river_divides(g, cfg->islandWindow, cfg->islandStep))
+        return r;
 
     /* 5c. Structure requirements: required present, excluded absent, and at
      *     least one included present (if any). */
