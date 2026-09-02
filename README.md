@@ -50,8 +50,10 @@ parameters:
   ancient city, trial chamber, coastal shipwreck), checked within the island.
   Stacking several requirements is rare. **Coastal Shipwreck** is filtered:
   shipwrecks generate all over the open ocean, but only ones beached on the shore
-  or nearly beached (land within ~24 blocks) count, so it finds the island-hugging
-  wrecks players want, not the ones far out at sea.
+  or right at the waterline (real land within ~8 blocks) count, so it finds the
+  island-hugging wrecks players want, not the ones out at sea. The distance is
+  measured to the shore biome at 4-block resolution, so it's kept deliberately
+  tight -- the in-game sand can sit a few blocks either side of the biome edge.
 - **Show structures on maps** — independent per-type toggles overlay colour-coded
   markers on every result map (hover a marker for its name and coordinates), with
   a legend under each map counting how many of each type are in view.

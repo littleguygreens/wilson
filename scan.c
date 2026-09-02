@@ -749,12 +749,14 @@ static int camp_positions(Generator *g, uint64_t seed, int exp263,
 }
 
 /* Shipwrecks generate all over the open ocean, but players want the ones grounded
- * on a survival island's shore. A wreck counts as coastal when it is beached (its
- * own cell is land) or nearly beached (land lies within SHIP_COAST_DIST blocks).
- * A ship hull is ~28 blocks, so a wreck within ~24 blocks of land is sitting on
- * the coastline; anything farther is out at sea and rejected. Rivers don't count
- * as the coast here -- only real land (non-ocean, non-river). */
-#define SHIP_COAST_DIST 24
+ * on a survival island's shore -- beached, or so close they've all but run aground.
+ * A wreck counts as coastal when it is on land itself or real land lies within
+ * SHIP_COAST_DIST blocks. Distances are measured to the shore *biome* boundary at
+ * 4-block (biome-cell) resolution, so the threshold is kept deliberately tight:
+ * the in-game sand can sit a few blocks either side of the biome edge, and at this
+ * range that slop matters. Rivers don't count as the coast -- only real land
+ * (non-ocean, non-river). */
+#define SHIP_COAST_DIST 8
 static int is_land_cell(Generator *g, int x, int z)
 {
     int b = biome_at_block(g, x, SURFACE_Y, z);
@@ -762,12 +764,13 @@ static int is_land_cell(Generator *g, int x, int z)
 }
 static int shipwreck_coastal(Generator *g, int x, int z)
 {
-    if (is_land_cell(g, x, z))                 /* beached on the shore itself */
-        return 1;
-    for (int dz = -SHIP_COAST_DIST; dz <= SHIP_COAST_DIST; dz += 8)
-        for (int dx = -SHIP_COAST_DIST; dx <= SHIP_COAST_DIST; dx += 8)
-            if ((dx || dz) && is_land_cell(g, x + dx, z + dz))
-                return 1;                      /* land within a ship-length: coast */
+    /* Scan a disc at biome-cell resolution and keep the wreck only if land falls
+     * within the (Euclidean) threshold -- includes the wreck's own cell. */
+    for (int dz = -SHIP_COAST_DIST; dz <= SHIP_COAST_DIST; dz += 4)
+        for (int dx = -SHIP_COAST_DIST; dx <= SHIP_COAST_DIST; dx += 4)
+            if (dx * dx + dz * dz <= SHIP_COAST_DIST * SHIP_COAST_DIST &&
+                is_land_cell(g, x + dx, z + dz))
+                return 1;
     return 0;
 }
 
