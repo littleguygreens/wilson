@@ -192,6 +192,7 @@ var structCatalog = []structEntry{
 	{"ruined_portal", "Ruined Portal", "#a878f0", int32(C.Ruined_Portal), false},
 	{"ancient_city", "Ancient City", "#4a90d9", int32(C.Ancient_City), false},
 	{"trial_chambers", "Trial Chamber", "#e8873a", int32(C.Trial_Chambers), false},
+	{"shipwreck", "Coastal Shipwreck", "#5b8aa6", int32(C.Shipwreck), false},
 	{"abandoned_camp", "Abandoned Camp", "#8fbf6f", int32(C.STRUCT_ABANDONED_CAMP), true},
 }
 

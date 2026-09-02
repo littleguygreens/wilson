@@ -748,6 +748,29 @@ static int camp_positions(Generator *g, uint64_t seed, int exp263,
     return cnt;
 }
 
+/* Shipwrecks generate all over the open ocean, but players want the ones grounded
+ * on a survival island's shore. A wreck counts as coastal when it is beached (its
+ * own cell is land) or nearly beached (land lies within SHIP_COAST_DIST blocks).
+ * A ship hull is ~28 blocks, so a wreck within ~24 blocks of land is sitting on
+ * the coastline; anything farther is out at sea and rejected. Rivers don't count
+ * as the coast here -- only real land (non-ocean, non-river). */
+#define SHIP_COAST_DIST 24
+static int is_land_cell(Generator *g, int x, int z)
+{
+    int b = biome_at_block(g, x, SURFACE_Y, z);
+    return !is_ocean(b) && !is_river(b);
+}
+static int shipwreck_coastal(Generator *g, int x, int z)
+{
+    if (is_land_cell(g, x, z))                 /* beached on the shore itself */
+        return 1;
+    for (int dz = -SHIP_COAST_DIST; dz <= SHIP_COAST_DIST; dz += 8)
+        for (int dx = -SHIP_COAST_DIST; dx <= SHIP_COAST_DIST; dx += 8)
+            if ((dx || dz) && is_land_cell(g, x + dx, z + dz))
+                return 1;                      /* land within a ship-length: coast */
+    return 0;
+}
+
 /* Does a viable instance of `type` exist within the block box? Early-out. The
  * generator must already be seeded for the overworld. */
 static int struct_exists(Generator *g, uint64_t seed, int type, int exp263,
@@ -765,7 +788,9 @@ static int struct_exists(Generator *g, uint64_t seed, int type, int exp263,
             Pos p;
             if (!getStructurePos(type, MC_VERSION, seed, rx, rz, &p)) continue;
             if (p.x < x0 || p.x > x1 || p.z < z0 || p.z > z1) continue;
-            if (isViableStructurePos(type, g, p.x, p.z, 0)) return 1;
+            if (!isViableStructurePos(type, g, p.x, p.z, 0)) continue;
+            if (type == Shipwreck && !shipwreck_coastal(g, p.x, p.z)) continue;
+            return 1;
         }
     return 0;
 }
@@ -790,6 +815,7 @@ int scanner_structures(void *s, uint64_t seed, int structType, int exp263,
             if (!getStructurePos(structType, MC_VERSION, seed, rx, rz, &p)) continue;
             if (p.x < x0 || p.x > x1 || p.z < z0 || p.z > z1) continue;
             if (!isViableStructurePos(structType, g, p.x, p.z, 0)) continue;
+            if (structType == Shipwreck && !shipwreck_coastal(g, p.x, p.z)) continue;
             if (cnt < max) { out[cnt * 2] = p.x; out[cnt * 2 + 1] = p.z; }
             cnt++;
         }
