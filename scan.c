@@ -756,7 +756,7 @@ static int camp_positions(Generator *g, uint64_t seed, int exp263,
  * the in-game sand can sit a few blocks either side of the biome edge, and at this
  * range that slop matters. Rivers don't count as the coast -- only real land
  * (non-ocean, non-river). */
-#define SHIP_COAST_DIST 8
+#define SHIP_COAST_DIST 4
 static int is_land_cell(Generator *g, int x, int z)
 {
     int b = biome_at_block(g, x, SURFACE_Y, z);
