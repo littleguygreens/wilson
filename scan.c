@@ -327,7 +327,7 @@ static void island_metrics(Generator *g, int window, int step,
  * the largest chunk of island land left unreachable: a river running fully across
  * strands one side, while a river that only poks in from the sea and dead-ends
  * leaves the land joined around its tip. We flag the seed only when the stranded
- * side is a substantial share of the island (a fifth), so a channel shaving a
+ * side is a meaningful share of the island (a tenth), so a channel shaving a
  * small nub off the coast doesn't reject an otherwise good island. Centred on
  * (0,0), which an earlier check has already confirmed is land. Returns 1 to
  * reject. */
@@ -390,7 +390,7 @@ static int river_divides(Generator *g, int window, int step)
 
     /* Largest land component stranded on the far side of a river. */
     int worst = 0;
-    for (int s = 0; s < n * n && worst * 5 < totalLand; s++) {
+    for (int s = 0; s < n * n && worst * 10 < totalLand; s++) {
         if (mark[s] != 1 || cell[s] != 1) continue;   /* unreached blob land */
         top = 0; mark[s] = 3; stk[top++] = s;
         int size = 1;
@@ -410,7 +410,7 @@ static int river_divides(Generator *g, int window, int step)
 
     free(cell); free(mark); free(stk);
     (void)mainLand;
-    return totalLand > 0 && worst * 5 >= totalLand;   /* >= 20% stranded -> reject */
+    return totalLand > 0 && worst * 10 >= totalLand;  /* >= 10% stranded -> reject */
 }
 
 /* One pass over the island footprint at gridStep resolution. Counts land over
