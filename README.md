@@ -34,7 +34,7 @@ parameters:
   appear), or **exclude** (must not appear).
 - **Presets** — one built-in "Mountain Isle" search, plus up to 5 of your own
   saved in the browser (localStorage). Tap to load a full configuration; tap the
-  red **×** on a saved preset to delete it.
+  **×** on a saved preset to delete it.
 - **Ocean types** — tri-state for the surrounding sea, checked across the whole
   visible sea (not just a ring). Unlike the land biomes, oceans use a
   **whitelist**: since the sea is entirely ocean, the point is which ocean types
