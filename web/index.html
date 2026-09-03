@@ -74,8 +74,8 @@
   .trilegend .k.req { color: var(--good); }
   .trilegend .k.exc { color: #ff6b6b; }
   .chip.preset { border-color: var(--accent); display: inline-flex; align-items: center; }
-  .chip.preset .del { margin-left: 9px; color: var(--muted); font-weight: 700; padding: 0 2px; }
-  .chip.preset .del:hover { color: #ff6b6b; }
+  .chip.preset .del { margin-left: 9px; color: #ff6b6b; font-weight: 700; font-size: 15px; line-height: 1; padding: 0 4px; border-radius: 5px; }
+  .chip.preset .del:hover { background: rgba(255,107,107,0.16); }
   .chip.save { border-style: dashed; color: var(--muted); }
 
   /* segmented control (size) */
@@ -405,7 +405,7 @@
   }];
   const PRESET_KEY = 'wilson.presets';
   const OLD_PRESET_KEY = 'seedscan.presets';
-  const MAX_PRESETS = 3;
+  const MAX_PRESETS = 5;
 
   function loadUserPresets() {
     try {
@@ -424,12 +424,15 @@
     const add = (label, onLoad, onDel) => {
       const c = document.createElement('span'); c.className = 'chip preset';
       const t = document.createElement('span'); t.textContent = label; t.onclick = onLoad; c.appendChild(t);
-      if (onDel) { const d = document.createElement('span'); d.className = 'del'; d.textContent = '×'; d.onclick = (e) => { e.stopPropagation(); onDel(); }; c.appendChild(d); }
+      if (onDel) { const d = document.createElement('span'); d.className = 'del'; d.textContent = '×'; d.title = 'Delete preset'; d.setAttribute('aria-label', 'Delete preset'); d.onclick = (e) => { e.stopPropagation(); onDel(); }; c.appendChild(d); }
       box.appendChild(c);
     };
     BUILTIN_PRESETS.forEach(p => add(p.name, () => applyPreset(p.cfg)));
     const users = loadUserPresets();
-    users.forEach((p, i) => add(p.name, () => applyPreset(p.cfg), () => { users.splice(i, 1); saveUserPresets(users); renderPresets(); }));
+    users.forEach((p, i) => add(p.name, () => applyPreset(p.cfg), () => {
+      if (!confirm('Delete preset "' + p.name + '"?')) return;
+      users.splice(i, 1); saveUserPresets(users); renderPresets();
+    }));
     if (users.length < MAX_PRESETS) {
       const c = document.createElement('span'); c.className = 'chip save';
       c.textContent = '+ Save current'; c.onclick = savePreset; box.appendChild(c);
@@ -438,7 +441,7 @@
 
   function savePreset() {
     const users = loadUserPresets();
-    if (users.length >= MAX_PRESETS) { alert('You have 3 presets. Delete one first.'); return; }
+    if (users.length >= MAX_PRESETS) { alert('You have ' + MAX_PRESETS + ' presets. Delete one first.'); return; }
     const name = (prompt('Name this preset:', 'My search') || '').trim();
     if (!name) return;
     const existing = users.findIndex(p => p.name === name);
