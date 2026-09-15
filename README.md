@@ -113,6 +113,15 @@ surface biome is one of its 18 allowed biomes (which include Dappled Forest), so
 the check reuses the 26.3-aware biome lookup. cubiomes has no id for it, so wilson
 tags it with a private structure type; the whole feature is gated to 26.3 mode.
 
+Because Dappled Forest is carved out of the plains climate cell, 26.3 mode also
+corrects a structure mismatch: cubiomes' 1.21 generator still sees plains there
+and would place a **village** or **pillager outpost**, but the released 26.3 biome
+tags list those in plains and not in dappled_forest (ruined portals, by contrast,
+sit in the `is_forest` tag, which does include dappled_forest, so they still
+generate). So when 26.3 mode is on, wilson drops a village or outpost whose
+position lands on a cell it relabels to Dappled Forest -- otherwise the map would
+promise a village the game never builds.
+
 ## Saving finds
 
 Tap **☆ Save** on any result to keep it. The **Saved** tab lists your kept

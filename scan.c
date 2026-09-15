@@ -774,6 +774,21 @@ static int shipwreck_coastal(Generator *g, int x, int z)
     return 0;
 }
 
+/* 26.3 correction. Dappled Forest is carved out of the plains climate cell, but
+ * cubiomes' 1.21 generator still sees plains there and will place any structure
+ * that spawns in plains. In the released 26.3 biome tags, villages and pillager
+ * outposts list plains but NOT dappled_forest, so cubiomes puts one where 26.3
+ * would not -- a phantom the player finds missing in game. (Ruined portals, by
+ * contrast, sit in #is_forest, which does include dappled_forest, so they still
+ * generate and are left alone.) When 26.3 mode is on, drop a village or outpost
+ * whose position lands on a cell we relabel to Dappled Forest. */
+static int phantom_on_dappled(int type, Generator *g, int exp263, int x, int z)
+{
+    if (!exp263 || (type != Village && type != Outpost))
+        return 0;
+    return biome_263(g, exp263, x, SURFACE_Y, z) == B_DAPPLED_FOREST;
+}
+
 /* Does a viable instance of `type` exist within the block box? Early-out. The
  * generator must already be seeded for the overworld. */
 static int struct_exists(Generator *g, uint64_t seed, int type, int exp263,
@@ -793,6 +808,7 @@ static int struct_exists(Generator *g, uint64_t seed, int type, int exp263,
             if (p.x < x0 || p.x > x1 || p.z < z0 || p.z > z1) continue;
             if (!isViableStructurePos(type, g, p.x, p.z, 0)) continue;
             if (type == Shipwreck && !shipwreck_coastal(g, p.x, p.z)) continue;
+            if (phantom_on_dappled(type, g, exp263, p.x, p.z)) continue;
             return 1;
         }
     return 0;
@@ -819,6 +835,7 @@ int scanner_structures(void *s, uint64_t seed, int structType, int exp263,
             if (p.x < x0 || p.x > x1 || p.z < z0 || p.z > z1) continue;
             if (!isViableStructurePos(structType, g, p.x, p.z, 0)) continue;
             if (structType == Shipwreck && !shipwreck_coastal(g, p.x, p.z)) continue;
+            if (phantom_on_dappled(structType, g, exp263, p.x, p.z)) continue;
             if (cnt < max) { out[cnt * 2] = p.x; out[cnt * 2 + 1] = p.z; }
             cnt++;
         }
