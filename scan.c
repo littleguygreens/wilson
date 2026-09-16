@@ -24,7 +24,7 @@ static int biome_at_block(Generator *g, int bx, int by, int bz)
     return getBiomeAt(g, 4, bx >> 2, by >> 2, bz >> 2);
 }
 
-/* Experimental Minecraft 26.3 support. cubiomes has no 26.3 generator, but the
+/* Minecraft 26.3 support. cubiomes has no 26.3 generator, but the
  * decompiled 26.3 world-gen shows the only relevant change is a surgical biome
  * edit on the unchanged 1.18 climate noise: Dappled Forest occupies the plains
  * cell at temperature band 1, humidity band 0, weirdness >= 0. So we keep
