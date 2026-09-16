@@ -1,7 +1,7 @@
 /* Generated from Minecraft 26.3 OverworldBiomeBuilder (see scratchpad/gen.py).
- * Full climate-parameter entry list for exact nearest-entry lookups used by
- * the experimental 26.3 mode (Dappled Forest + Sulfur Caves). Do not edit by
- * hand. Columns: T,H,C,E,D,W as [lo,hi] (climate*10000), then biome id. */
+ * Full climate-parameter entry list for the exact nearest-entry lookups behind
+ * the 26.3 Dappled Forest and Sulfur Caves relabels. Do not edit by hand.
+ * Columns: T,H,C,E,D,W as [lo,hi] (climate*10000), then biome id. */
 #define N_ENTRIES_263 7774
 #define B_SULFUR_CAVES 188
 #define B_DAPPLED_FOREST_ID 187
