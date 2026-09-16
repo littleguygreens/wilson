@@ -84,34 +84,39 @@ Matching seeds stream in live with their biome maps (white cross = spawn, red
 pin = stronghold). Tap a seed to copy it. Hover the map to read the block
 coordinates and biome under the cursor.
 
-## Experimental: Minecraft 26.3 (Dappled Forest)
+## Minecraft 26.3 (Dappled Forest, Sulfur Caves, Abandoned Camp)
 
-A checkbox in the Search tab enables an experimental **26.3** mode that adds the
-new **Dappled Forest** biome. cubiomes has no 26.3 generator, but the decompiled
-26.3 world-gen shows the climate noise is unchanged from 1.21 -- Dappled Forest
-is a surgical biome edit occupying the plains cell at temperature band 1,
-humidity band 0, weirdness >= 0. So wilson keeps cubiomes' fast, exact 1.21
-generator and *relabels* just that cell (`surface_biome` in `scan.c`). This was
-verified against chunkbase: for seed `1728186647319`, wilson reports Dappled
-Forest at (1250, -100) and (1250, 250), matching the map. When the mode is off,
-generation is byte-identical to plain 1.21.
+wilson targets **Minecraft 26.3**. cubiomes has no 26.3 generator, but the
+26.3 world-gen leaves the climate noise unchanged from 1.21, so its new content is
+a set of surgical edits on top of cubiomes' fast, exact 1.21 generator -- always
+on, no toggle.
 
-The mode also adds **Sulfur Caves** as a selectable cave biome. Sulfur sits at
-an extreme-weirdness climate box where a simple box test is not enough, so
-wilson embeds the full 26.3 climate entry list (`entries263.h`, generated from
-the decompiled world-gen) and does an exact nearest-entry check, gated by a
-cheap distance to the sulfur box so it only runs on the few cave cells where
-sulfur could win. It was validated cell-for-cell against that entry list.
+- **Dappled Forest** occupies the plains cell at temperature band 1, humidity band
+  0, weirdness >= 0, so wilson keeps the 1.21 generator and *relabels* just that
+  cell (`biome_263` in `scan.c`). Verified against chunkbase: for seed
+  `1728186647319`, wilson reports Dappled Forest at (1250, -100) and (1250, 250),
+  matching the map. Geometry (coasts, oceans, island shape) is untouched -- the
+  relabel only renames a cell.
+- **Sulfur Caves** sits at an extreme-weirdness climate box where a simple box
+  test is not enough, so wilson embeds the full 26.3 climate entry list
+  (`entries263.h`, generated from the decompiled world-gen) and does an exact
+  nearest-entry check, gated by a cheap distance to the sulfur box so it only runs
+  on the few cave cells where sulfur could win. Validated cell-for-cell against
+  that entry list.
+- **Abandoned Camp** is a searchable filter and a map marker like the other
+  structures. It uses Minecraft's `random_spread` placement (spacing 37,
+  separation 8, salt 91231127 from the 26.3 datapack), the same linear scheme
+  Villages use, so cubiomes' own `getFeaturePos` gives its exact positions with no
+  new generator -- verified byte-identical to cubiomes' Village placement path. A
+  camp is kept only where the surface biome is one of its 18 allowed biomes (which
+  include Dappled Forest). cubiomes has no id for it, so wilson tags it with a
+  private structure type.
 
-Finally it adds the 26.3 **Abandoned Camp** structure -- a searchable filter and
-a map marker like the other structures. Abandoned Camp uses Minecraft's
-`random_spread` placement (spacing 37, separation 8, salt 91231127 from the 26.3
-datapack), the very same linear scheme Villages use, so cubiomes' own
-`getFeaturePos` gives its exact positions with no new generator -- verified to be
-byte-identical to cubiomes' Village placement path. A camp is only kept where the
-surface biome is one of its 18 allowed biomes (which include Dappled Forest), so
-the check reuses the 26.3-aware biome lookup. cubiomes has no id for it, so wilson
-tags it with a private structure type; the whole feature is gated to 26.3 mode.
+Because Dappled Forest is carved out of the plains cell, wilson also drops
+**villages** and **pillager outposts** that cubiomes' 1.21 generator would place
+there: the released 26.3 biome tags list those in plains but not in dappled_forest
+(ruined portals, which sit in the `is_forest` tag, do generate there and are
+kept), so a village on a relabelled cell is a phantom the game never builds.
 
 Because Dappled Forest is carved out of the plains climate cell, 26.3 mode also
 corrects a structure mismatch: cubiomes' 1.21 generator still sees plains there

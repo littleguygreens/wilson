@@ -165,14 +165,6 @@
       <div id="sizeHint" class="hint"></div>
     </div>
 
-    <div class="group">
-      <label style="display:flex;align-items:center;gap:9px;cursor:pointer">
-        <input id="exp263" type="checkbox">
-        <span><b>⚗ Experimental: Minecraft 26.3</b> — adds the <b>Dappled Forest</b> biome</span>
-      </label>
-      <div class="hint">Uses cubiomes' 1.21 generator with a verified relabel for Dappled Forest (its climate is unchanged in 26.3). Enables the Dappled Forest chip below and draws it on maps. Other 26.3-only biomes aren't modelled yet.</div>
-    </div>
-
     <div class="trilegend">Chips cycle: <span class="k off">off</span> → <span class="k inc">＋ include</span> → <span class="k req">★ require</span> → <span class="k exc">✕ exclude</span></div>
 
     <div class="group collapsible" data-sec="biomes">
@@ -264,7 +256,7 @@
         <div class="field" style="flex:1"><input id="viewSeed" type="text" inputmode="numeric" placeholder="paste a seed number"></div>
         <button id="viewBtn" class="btn2" onclick="viewSeed()">View</button>
       </div>
-      <div class="hint">Opens any known seed as a card at the current size, honouring the 26.3 toggle. Hover the map to read coordinates and biome.</div>
+      <div class="hint">Opens any known seed as a card at the current size. Hover the map to read coordinates and biome.</div>
     </div>
   </div>
 
@@ -296,7 +288,7 @@
 <script>
   const $ = (id) => document.getElementById(id);
   let es = null;
-  const state = { size: 'M', sizes: [], structs: [], surfaceOpts: [], showStructs: new Set(), caveView: false, caveOutline: false, caveY: -50, exp263: false,
+  const state = { size: 'M', sizes: [], structs: [], surfaceOpts: [], showStructs: new Set(), caveView: false, caveOutline: false, caveY: -50,
     surfSel: new Map(), oceanSel: new Map(), caveSel: new Map(), structSel: new Map() };
 
   fetch('/api/biomes').then(r => r.json()).then(setup).catch(() => {
@@ -318,20 +310,7 @@
     state.surfaceOpts = d.surface;
     state.caveOpts = d.cave;
     state.structs = d.structures;
-    buildExpChips();
-    $('exp263').onchange = () => {
-      state.exp263 = $('exp263').checked;
-      if (!state.exp263) {
-        state.surfSel.forEach((v, k) => { if (isExpKey('surface', k)) state.surfSel.delete(k); });
-        state.caveSel.forEach((v, k) => { if (isExpKey('cave', k)) state.caveSel.delete(k); });
-        state.structSel.forEach((v, k) => { if (isExpKey('struct', k)) state.structSel.delete(k); });
-        state.structs.forEach((s) => { if (s.exp) state.showStructs.delete(s.key); });
-      }
-      buildExpChips();
-      applyLayerAll();
-      refreshAllOverlays();
-      updateBadges();
-    };
+    buildChips();
     buildTriChips('ocean', d.ocean, state.oceanSel);
     $('stronghold').onchange = () => { $('shWrap').classList.toggle('hidden', !$('stronghold').checked); updateBadges(); };
     $('noRiver').onchange = updateBadges;
@@ -473,8 +452,7 @@
       stronghold: $('stronghold').checked ? 1 : 0,
       shDist: parseInt($('shDist').value, 10) || 1700,
       n: parseInt($('n').value, 10) || 5,
-      workers: $('workers').value || '',
-      exp263: state.exp263 ? 1 : 0
+      workers: $('workers').value || ''
     };
   }
 
@@ -489,10 +467,9 @@
 
   function applyPreset(p) {
     setSize(p.size || 'M');
-    state.exp263 = !!p.exp263; $('exp263').checked = state.exp263;
     state.surfSel = migrateSel(p.surf, p.surface, p.surfaceAll);
     state.caveSel = migrateSel(Array.isArray(p.cave) ? null : p.cave, Array.isArray(p.cave) ? p.cave : null, p.caveAll);
-    buildExpChips();
+    buildChips();
     state.structSel = migrateSel(p.struct, p.structures, false); paintTri('reqStructs', state.structSel);
     state.oceanSel = migrateSel(Array.isArray(p.ocean) ? null : p.ocean, Array.isArray(p.ocean) ? p.ocean : null, false); paintTri('ocean', state.oceanSel);
     $('minCave').value = p.minCave || 3;
@@ -516,19 +493,11 @@
     [...$('sizes').children].forEach(c => c.classList.toggle('on', c.dataset.key === key));
     updateSizeHint();
   }
-  // Surface/cave chips include experimental (26.3) biomes only when that mode is on.
-  function isExpKey(cat, key) {
-    const opts = cat === 'cave' ? state.caveOpts : cat === 'struct' ? state.structs : state.surfaceOpts;
-    return ((opts || []).find(o => o.key === key) || {}).exp === true;
-  }
-  function buildExpChips() {
-    buildTriChips('surface', state.surfaceOpts.filter(o => !o.exp || state.exp263), state.surfSel);
-    buildTriChips('cave', state.caveOpts.filter(o => !o.exp || state.exp263), state.caveSel);
-    // state.structs stays the full list (so saved 26.3 cards still render their
-    // camp markers); only the interactive chips are gated to the current mode.
-    const structs = (state.structs || []).filter(o => !o.exp || state.exp263);
-    buildTriChips('reqStructs', structs, state.structSel);
-    buildShowStructs(structs);
+  function buildChips() {
+    buildTriChips('surface', state.surfaceOpts, state.surfSel);
+    buildTriChips('cave', state.caveOpts, state.caveSel);
+    buildTriChips('reqStructs', state.structs, state.structSel);
+    buildShowStructs(state.structs);
   }
   // Tri-state chips: each cycles off -> include -> require -> exclude -> off,
   // storing the state in selMap (key -> 'inc'|'req'|'exc').
@@ -599,7 +568,6 @@
     if ($('stronghold').checked) { p.set('stronghold', '1'); p.set('shDist', $('shDist').value); }
     if ($('moat').value !== '0') p.set('moat', $('moat').value);
     if ($('noRiver').checked) p.set('noRiver', '1');
-    if (state.exp263) p.set('exp263', '1');
 
     $('results').innerHTML = '';
     $('empty').classList.add('hidden');
@@ -620,24 +588,21 @@
   }
 
   function addMatch(m) {
-    m.exp263 = state.exp263; // remember the mode this find was made in
     $('found').textContent = String((parseInt($('found').textContent, 10) || 0) + 1);
     $('results').prepend(makeCard(m, false));
   }
 
-  // viewSeed opens one explicit seed as a card (no scan), at the current size and
-  // 26.3 toggle. Useful for inspecting a seed you already know.
+  // viewSeed opens one explicit seed as a card (no scan), at the current size.
+  // Useful for inspecting a seed you already know.
   function viewSeed() {
     const raw = ($('viewSeed').value || '').trim();
     if (!/^-?\d+$/.test(raw)) { alert('Enter a numeric seed.'); return; }
     const p = new URLSearchParams({ seed: raw, size: state.size });
-    if (state.exp263) p.set('exp263', '1');
     if ($('moat').value !== '0') p.set('moat', $('moat').value);
     const btn = $('viewBtn'); btn.disabled = true; btn.textContent = '…';
     fetch('/api/inspect?' + p.toString())
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(m => {
-        m.exp263 = state.exp263;
         $('empty').classList.add('hidden');
         $('results').prepend(makeCard(m, false));
       })
@@ -651,7 +616,6 @@
   function makeCard(m, isSaved) {
     const q = new URLSearchParams({ seed: m.seed, step: m.step, sx: m.spawnX, sz: m.spawnZ });
     if (m.hasStronghold) { q.set('st', '1'); q.set('stx', m.strongholdX); q.set('stz', m.strongholdZ); }
-    if (m.exp263) q.set('exp263', '1');
 
     const card = document.createElement('div'); card.className = 'card';
     const top = document.createElement('div'); top.className = 'top';
@@ -682,11 +646,9 @@
 
     const wrap = document.createElement('div'); wrap.className = 'mapwrap';
     wrap.dataset.seed = m.seed; wrap.dataset.step = m.step;
-    wrap.dataset.exp263 = m.exp263 ? '1' : '';
     const img = document.createElement('img'); img.loading = 'lazy';
     img.alt = 'map for seed ' + m.seed;
     img.dataset.seed = m.seed; img.dataset.step = m.step; img.dataset.mapq = q.toString();
-    img.dataset.exp263 = m.exp263 ? '1' : '';
     setLayer(img);
     img.addEventListener('pointermove', onMapHover);
     img.addEventListener('pointerleave', hideTip);
@@ -810,9 +772,7 @@
     const cov = wrap.querySelector('.caveoverlay');
     if (!cov) return;
     if (!state.caveOutline) { cov.style.display = 'none'; cov.removeAttribute('src'); return; }
-    const base = wrap.querySelector('img:not(.caveoverlay)');
-    const exp = base && base.dataset.exp263 ? '&exp263=1' : '';
-    cov.src = `/api/caveoverlay?seed=${encodeURIComponent(wrap.dataset.seed)}&step=${wrap.dataset.step}&y=${state.caveY}${exp}`;
+    cov.src = `/api/caveoverlay?seed=${encodeURIComponent(wrap.dataset.seed)}&step=${wrap.dataset.step}&y=${state.caveY}`;
     cov.style.display = '';
   }
   function applyCaveOverlayAll() {
@@ -840,8 +800,7 @@
     const step = parseInt(wrap.dataset.step, 10) || 4;
     const half = 256 * step; // the map spans +/- 256 pixels * step blocks
     const types = state.structs.map((s) => s.key).join(',');
-    const exp = wrap.dataset.exp263 ? '&exp263=1' : '';
-    fetch(`/api/structures?seed=${encodeURIComponent(wrap.dataset.seed)}&types=${types}&half=${half}${exp}`)
+    fetch(`/api/structures?seed=${encodeURIComponent(wrap.dataset.seed)}&types=${types}&half=${half}`)
       .then((r) => r.json())
       .then((d) => { wrap._structs = d; cb && cb(); })
       .catch(() => {});
@@ -937,7 +896,7 @@
     if (cell === tipLastCell) return;
     tipLastCell = cell;
     const token = ++tipReqToken;
-    fetch(`/api/biome?seed=${encodeURIComponent(img.dataset.seed)}&x=${bx}&z=${bz}&y=${y}${img.dataset.exp263 ? '&exp263=1' : ''}`)
+    fetch(`/api/biome?seed=${encodeURIComponent(img.dataset.seed)}&x=${bx}&z=${bz}&y=${y}`)
       .then((r) => r.json())
       .then((d) => { if (token !== tipReqToken) return; img._biome = prettyBiome(d.name); renderTip(); })
       .catch(() => {});
@@ -955,9 +914,7 @@
     t.innerHTML = `<b>${m._label}</b> · ${x}, ${z}` + (m._biome ? ` · ${m._biome}` : '');
     if (m._fetched) return;
     m._fetched = true;
-    const base = wrap.querySelector('img:not(.caveoverlay)');
-    const exp = base && base.dataset.exp263 ? '&exp263=1' : '';
-    fetch(`/api/biome?seed=${encodeURIComponent(wrap.dataset.seed)}&x=${x}&z=${z}&y=60${exp}`)
+    fetch(`/api/biome?seed=${encodeURIComponent(wrap.dataset.seed)}&x=${x}&z=${z}&y=60`)
       .then((r) => r.json())
       .then((d) => {
         m._biome = prettyBiome(d.name);

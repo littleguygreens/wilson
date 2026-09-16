@@ -77,15 +77,13 @@ static int nearest_263(const int64_t np[6])
     return bb;
 }
 
-/* Biome identity at a block, honouring the 26.3 relabels when exp263 is set:
- * Dappled Forest (cheap surface cell test) and Sulfur Caves (gated exact
- * nearest-entry). Used where the biome *name* matters (island biome gathering,
- * the hover tooltip, the map). Geometry/ocean lookups keep plain biome_at_block
- * so island shape is byte-identical to 1.21. */
-static int biome_263(Generator *g, int exp263, int bx, int by, int bz)
+/* Biome identity at a block, applying the 26.3 relabels: Dappled Forest (cheap
+ * surface cell test) and Sulfur Caves (gated exact nearest-entry). Used where the
+ * biome *name* matters (island biome gathering, the hover tooltip, the map).
+ * Geometry/ocean lookups keep plain biome_at_block, so island shape is unchanged
+ * from cubiomes' generator (the relabels only rename cells, never move coasts). */
+static int biome_263(Generator *g, int bx, int by, int bz)
 {
-    if (!exp263)
-        return getBiomeAt(g, 4, bx >> 2, by >> 2, bz >> 2);
     int64_t np[6];
     int b = sampleBiomeNoise(&g->bn, np, bx >> 2, by >> 2, bz >> 2, NULL, 0);
     if (b == plains &&
@@ -472,11 +470,11 @@ static int gather_island(Generator *g, const ScanConfig *cfg,
             int bx = (i - c) * step, bz = (j - c) * step;
             if (bx * bx + bz * bz > R * R)
                 continue;
-            int surf = biome_263(g, cfg->exp263, bx, SURFACE_Y, bz);
+            int surf = biome_263(g, bx, SURFACE_Y, bz);
             for (int k = 0; k < cfg->nSurface; k++)
                 if (cfg->surface[k] == surf) *surfaceSeen |= (1u << k);
             if (cfg->nCave > 0) {
-                int cav = biome_263(g, cfg->exp263, bx, CAVE_Y, bz);
+                int cav = biome_263(g, bx, CAVE_Y, bz);
                 for (int k = 0; k < cfg->nCave; k++)
                     if (cfg->cave[k] == cav) { caveHits[k]++; (*caveTotal)++; }
             }
@@ -505,7 +503,7 @@ void scanner_free(void *s)
 /* ---- the actual filter ----------------------------------------------- */
 
 /* Defined below, in the structures section. */
-static int struct_exists(Generator *g, uint64_t seed, int type, int exp263,
+static int struct_exists(Generator *g, uint64_t seed, int type,
                          int x0, int z0, int x1, int z1);
 
 ScanResult scanner_check(void *s, uint64_t seed, const ScanConfig *cfg)
@@ -622,7 +620,7 @@ ScanResult scanner_check(void *s, uint64_t seed, const ScanConfig *cfg)
         int R = cfg->structRadius > 0 ? cfg->structRadius : cfg->islandRadius;
         int hasInc = 0, incSeen = 0;
         for (int i = 0; i < cfg->nStructures; i++) {
-            int present = struct_exists(g, seed, cfg->structures[i], cfg->exp263, -R, -R, R, R);
+            int present = struct_exists(g, seed, cfg->structures[i], -R, -R, R, R);
             switch (cfg->structMode[i]) {
             case SEL_REQUIRED: if (!present) return r; break;
             case SEL_EXCLUDED: if (present) return r; break;
@@ -686,11 +684,11 @@ ScanResult scanner_inspect(void *s, uint64_t seed, const ScanConfig *cfg)
     return r;
 }
 
-int scanner_biome(void *s, uint64_t seed, int x, int y, int z, int exp263)
+int scanner_biome(void *s, uint64_t seed, int x, int y, int z)
 {
     Generator *g = (Generator *)s;
     applySeed(g, DIM_OVERWORLD, seed);
-    return biome_263(g, exp263, x, y, z);
+    return biome_263(g, x, y, z);
 }
 
 /* ---- structures ------------------------------------------------------ */
@@ -703,14 +701,14 @@ int scanner_biome(void *s, uint64_t seed, int x, int y, int z, int exp263)
  * {salt, regionSize=spacing, chunkRange=spacing-separation}. Config from the
  * 26.3 datapack (abandoned_camp.json): spacing 37, separation 8, salt 91231127.
  * Viability is its own 18-biome allow-list, checked with biome_263 so Dappled
- * Forest counts when 26.3 mode is on (and, being 26.3-only, the whole structure
- * is gated to exp263 on the Go/UI side). */
+ * Forest counts. cubiomes has no enum for the camp, so wilson tags it with a
+ * private sentinel type. */
 #define STRUCT_ABANDONED_CAMP 1000
 static const StructureConfig CAMP_CONF = { 91231127, 37, 29, 0, 0, 0.f };
 
 /* The biomes an Abandoned Camp may spawn in (26.3 structure variants). Ids are
- * cubiomes' 1.21 ids; B_DAPPLED_FOREST (187) only ever comes back from biome_263
- * when exp263 is set, so listing it here needs no extra guard. */
+ * cubiomes' ids; B_DAPPLED_FOREST (187) is wilson's synthesised id for the 26.3
+ * relabel, returned by biome_263. */
 static const int CAMP_BIOMES[] = {
     bamboo_jungle, birch_forest, cherry_grove, flower_forest, forest, meadow,
     old_growth_pine_taiga, old_growth_birch_forest, old_growth_spruce_taiga,
@@ -718,9 +716,9 @@ static const int CAMP_BIOMES[] = {
     windswept_forest, wooded_badlands, B_DAPPLED_FOREST,
 };
 
-static int camp_viable(Generator *g, int exp263, int x, int z)
+static int camp_viable(Generator *g, int x, int z)
 {
-    int b = biome_263(g, exp263, x, SURFACE_Y, z);
+    int b = biome_263(g, x, SURFACE_Y, z);
     for (int i = 0; i < (int)(sizeof CAMP_BIOMES / sizeof CAMP_BIOMES[0]); i++)
         if (CAMP_BIOMES[i] == b) return 1;
     return 0;
@@ -731,7 +729,7 @@ static int camp_viable(Generator *g, int exp263, int x, int z)
  * cubiomes StructureType handled by getStructurePos + isViableStructurePos. The
  * two paths share the same region-grid walk here. Calls back into `hit(x,z)` for
  * each viable position (early-out when it returns 1 is the caller's job). */
-static int camp_positions(Generator *g, uint64_t seed, int exp263,
+static int camp_positions(Generator *g, uint64_t seed,
                           int x0, int z0, int x1, int z1, int *out, int max)
 {
     int reg = CAMP_CONF.regionSize * 16;
@@ -740,7 +738,7 @@ static int camp_positions(Generator *g, uint64_t seed, int exp263,
         for (int rx = floordiv(x0, reg); rx <= floordiv(x1, reg); rx++) {
             Pos p = getFeaturePos(CAMP_CONF, seed, rx, rz);
             if (p.x < x0 || p.x > x1 || p.z < z0 || p.z > z1) continue;
-            if (!camp_viable(g, exp263, p.x, p.z)) continue;
+            if (!camp_viable(g, p.x, p.z)) continue;
             if (out && cnt < max) { out[cnt * 2] = p.x; out[cnt * 2 + 1] = p.z; }
             cnt++;
             if (!out) return cnt;          /* existence check: first hit is enough */
@@ -780,22 +778,22 @@ static int shipwreck_coastal(Generator *g, int x, int z)
  * outposts list plains but NOT dappled_forest, so cubiomes puts one where 26.3
  * would not -- a phantom the player finds missing in game. (Ruined portals, by
  * contrast, sit in #is_forest, which does include dappled_forest, so they still
- * generate and are left alone.) When 26.3 mode is on, drop a village or outpost
- * whose position lands on a cell we relabel to Dappled Forest. */
-static int phantom_on_dappled(int type, Generator *g, int exp263, int x, int z)
+ * generate and are left alone.) Drop a village or outpost whose position lands on
+ * a cell we relabel to Dappled Forest. */
+static int phantom_on_dappled(int type, Generator *g, int x, int z)
 {
-    if (!exp263 || (type != Village && type != Outpost))
+    if (type != Village && type != Outpost)
         return 0;
-    return biome_263(g, exp263, x, SURFACE_Y, z) == B_DAPPLED_FOREST;
+    return biome_263(g, x, SURFACE_Y, z) == B_DAPPLED_FOREST;
 }
 
 /* Does a viable instance of `type` exist within the block box? Early-out. The
  * generator must already be seeded for the overworld. */
-static int struct_exists(Generator *g, uint64_t seed, int type, int exp263,
+static int struct_exists(Generator *g, uint64_t seed, int type,
                          int x0, int z0, int x1, int z1)
 {
     if (type == STRUCT_ABANDONED_CAMP)
-        return camp_positions(g, seed, exp263, x0, z0, x1, z1, NULL, 0) > 0;
+        return camp_positions(g, seed, x0, z0, x1, z1, NULL, 0) > 0;
 
     StructureConfig sc;
     if (!getStructureConfig(type, MC_VERSION, &sc)) return 0;
@@ -808,20 +806,20 @@ static int struct_exists(Generator *g, uint64_t seed, int type, int exp263,
             if (p.x < x0 || p.x > x1 || p.z < z0 || p.z > z1) continue;
             if (!isViableStructurePos(type, g, p.x, p.z, 0)) continue;
             if (type == Shipwreck && !shipwreck_coastal(g, p.x, p.z)) continue;
-            if (phantom_on_dappled(type, g, exp263, p.x, p.z)) continue;
+            if (phantom_on_dappled(type, g, p.x, p.z)) continue;
             return 1;
         }
     return 0;
 }
 
-int scanner_structures(void *s, uint64_t seed, int structType, int exp263,
+int scanner_structures(void *s, uint64_t seed, int structType,
                        int x0, int z0, int x1, int z1, int *out, int max)
 {
     Generator *g = (Generator *)s;
     applySeed(g, DIM_OVERWORLD, seed);
 
     if (structType == STRUCT_ABANDONED_CAMP)
-        return camp_positions(g, seed, exp263, x0, z0, x1, z1, out, max);
+        return camp_positions(g, seed, x0, z0, x1, z1, out, max);
 
     StructureConfig sc;
     if (!getStructureConfig(structType, MC_VERSION, &sc)) return 0;
@@ -835,7 +833,7 @@ int scanner_structures(void *s, uint64_t seed, int structType, int exp263,
             if (p.x < x0 || p.x > x1 || p.z < z0 || p.z > z1) continue;
             if (!isViableStructurePos(structType, g, p.x, p.z, 0)) continue;
             if (structType == Shipwreck && !shipwreck_coastal(g, p.x, p.z)) continue;
-            if (phantom_on_dappled(structType, g, exp263, p.x, p.z)) continue;
+            if (phantom_on_dappled(structType, g, p.x, p.z)) continue;
             if (cnt < max) { out[cnt * 2] = p.x; out[cnt * 2 + 1] = p.z; }
             cnt++;
         }
@@ -845,7 +843,7 @@ int scanner_structures(void *s, uint64_t seed, int structType, int exp263,
 /* ---- map rendering support ------------------------------------------- */
 
 void scanner_biome_grid(void *s, uint64_t seed, int size, int step,
-                        int y, int exp263, int *out)
+                        int y, int *out)
 {
     Generator *g = (Generator *)s;
     applySeed(g, DIM_OVERWORLD, seed);
@@ -855,7 +853,7 @@ void scanner_biome_grid(void *s, uint64_t seed, int size, int step,
         for (int i = 0; i < size; i++) {
             int bx = (i - half) * step;
             int bz = (j - half) * step;
-            out[j * size + i] = biome_263(g, exp263, bx, y, bz);
+            out[j * size + i] = biome_263(g, bx, y, bz);
         }
     }
 }

@@ -81,11 +81,6 @@ typedef struct {
     int structMode[SCAN_MAX_LIST];
     int nStructures;
     int structRadius;
-
-    /* Experimental Minecraft 26.3 mode: keep cubiomes' 1.21 generator but relabel
-     * the plains cell that became Dappled Forest in 26.3 (see surface_biome in
-     * scan.c). 0 = plain 1.21 behaviour. */
-    int exp263;
 } ScanConfig;
 
 /* Per-feature selection modes. */
@@ -117,27 +112,26 @@ ScanResult  scanner_check(void *s, uint64_t seed, const ScanConfig *cfg);
  * seed, for the "view a seed" feature. */
 ScanResult  scanner_inspect(void *s, uint64_t seed, const ScanConfig *cfg);
 
-/* Biome id at a single block coordinate (for the hover tooltip). exp263 enables
- * the experimental 26.3 Dappled Forest relabel. */
-int         scanner_biome(void *s, uint64_t seed, int x, int y, int z, int exp263);
+/* Biome id at a single block coordinate (for the hover tooltip), with the 26.3
+ * Dappled Forest / Sulfur Caves relabels applied. */
+int         scanner_biome(void *s, uint64_t seed, int x, int y, int z);
 
 /* wilson's private structure type for the 26.3 Abandoned Camp, which cubiomes
  * has no enum for. Kept well above cubiomes' FEATURE_NUM so it never collides
- * with a real StructureType. Only meaningful when exp263 is set. */
+ * with a real StructureType. */
 #define STRUCT_ABANDONED_CAMP 1000
 
 /* Finds viable instances of one structure type whose position falls in the block
  * box [x0,z0]-[x1,z1]. structType is a cubiomes StructureType, or the private
- * STRUCT_ABANDONED_CAMP; exp263 enables the 26.3 relabels used by the camp's
- * biome viability. Writes up to `max` (x,z) pairs into out[2*max]; returns how
- * many were found (may exceed max). */
-int         scanner_structures(void *s, uint64_t seed, int structType, int exp263,
+ * STRUCT_ABANDONED_CAMP. Writes up to `max` (x,z) pairs into out[2*max]; returns
+ * how many were found (may exceed max). */
+int         scanner_structures(void *s, uint64_t seed, int structType,
                                int x0, int z0, int x1, int z1, int *out, int max);
 
 /* Fills out[size*size] with biome ids for a square centred on 0,0.
  * step = blocks per pixel. y = block height to sample at. */
 void        scanner_biome_grid(void *s, uint64_t seed, int size, int step,
-                               int y, int exp263, int *out);
+                               int y, int *out);
 
 /* Copies cubiomes' 256-entry RGB palette into out[768]. */
 void        scanner_colors(unsigned char *out);

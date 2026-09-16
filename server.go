@@ -133,13 +133,11 @@ func biomesHandler(w http.ResponseWriter, r *http.Request) {
 	type opt struct {
 		Key   string `json:"key"`
 		Label string `json:"label"`
-		Exp   bool   `json:"exp,omitempty"` // only shown in experimental 26.3 mode
 	}
 	type structOpt struct {
 		Key   string `json:"key"`
 		Label string `json:"label"`
 		Color string `json:"color"`
-		Exp   bool   `json:"exp,omitempty"` // only shown in experimental 26.3 mode
 	}
 	out := struct {
 		Surface    []opt        `json:"surface"`
@@ -151,7 +149,7 @@ func biomesHandler(w http.ResponseWriter, r *http.Request) {
 	}{Sizes: sizePresets, MaxSurface: maxSurface}
 
 	for _, e := range catalog {
-		o := opt{Key: e.Key, Label: e.Label, Exp: e.exp263}
+		o := opt{Key: e.Key, Label: e.Label}
 		switch e.Category {
 		case "surface":
 			out.Surface = append(out.Surface, o)
@@ -162,7 +160,7 @@ func biomesHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	for _, e := range structCatalog {
-		out.Structures = append(out.Structures, structOpt{Key: e.Key, Label: e.Label, Color: e.Color, Exp: e.exp263})
+		out.Structures = append(out.Structures, structOpt{Key: e.Key, Label: e.Label, Color: e.Color})
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(out)
@@ -183,7 +181,6 @@ func structuresHandler(w http.ResponseWriter, r *http.Request) {
 	if half > 100000 {
 		half = 100000
 	}
-	exp263 := r.URL.Query().Get("exp263") == "1"
 	out := map[string][][2]int{}
 	for _, k := range strings.Split(r.URL.Query().Get("types"), ",") {
 		k = strings.TrimSpace(k)
@@ -191,7 +188,7 @@ func structuresHandler(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		if id, ok := structKeyToID(k); ok {
-			out[k] = structuresAt(uint64(seed), id, half, exp263)
+			out[k] = structuresAt(uint64(seed), id, half)
 		}
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -264,7 +261,6 @@ func configFromQuery(r *http.Request) Config {
 		cfg.StructRadius = cfg.IslandRadius
 	}
 
-	cfg.Exp263 = q.Get("exp263") == "1"
 	cfg.RejectDividingRiver = q.Get("noRiver") == "1"
 
 	// Full-enclosure flood fill is always on: results are never peninsulas.
@@ -399,7 +395,7 @@ func scanHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // inspectHandler returns a matchDTO for one explicit seed (no filtering), so the
-// UI can open any known seed as an interactive card. Honours size + exp263.
+// UI can open any known seed as an interactive card. Honours size.
 func inspectHandler(w http.ResponseWriter, r *http.Request) {
 	seed, err := strconv.ParseInt(r.URL.Query().Get("seed"), 10, 64)
 	if err != nil {
@@ -437,11 +433,9 @@ func mapHandler(w http.ResponseWriter, r *http.Request) {
 		sh = &marker{queryInt(r, "stx", 0), queryInt(r, "stz", 0)}
 	}
 
-	exp263 := r.URL.Query().Get("exp263") == "1"
-
 	w.Header().Set("Content-Type", "image/png")
 	w.Header().Set("Cache-Control", "public, max-age=3600")
-	if err := renderPNG(w, uint64(seed), step, y, exp263, spawn, sh); err != nil && !isClientGone(err) {
+	if err := renderPNG(w, uint64(seed), step, y, spawn, sh); err != nil && !isClientGone(err) {
 		log.Printf("render map for seed %d: %v", seed, err)
 	}
 }
@@ -456,10 +450,9 @@ func caveOverlayHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	step := queryInt(r, "step", 4)
 	y := queryInt(r, "y", -50)
-	exp263 := r.URL.Query().Get("exp263") == "1"
 	w.Header().Set("Content-Type", "image/png")
 	w.Header().Set("Cache-Control", "public, max-age=3600")
-	if err := renderCaveOverlayPNG(w, uint64(seed), step, y, exp263); err != nil && !isClientGone(err) {
+	if err := renderCaveOverlayPNG(w, uint64(seed), step, y); err != nil && !isClientGone(err) {
 		log.Printf("cave overlay for seed %d: %v", seed, err)
 	}
 }
@@ -484,8 +477,7 @@ func biomeHandler(w http.ResponseWriter, r *http.Request) {
 	x := queryInt(r, "x", 0)
 	z := queryInt(r, "z", 0)
 	y := queryInt(r, "y", 60)
-	exp263 := r.URL.Query().Get("exp263") == "1"
-	id, name := biomeAt(uint64(seed), x, y, z, exp263)
+	id, name := biomeAt(uint64(seed), x, y, z)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{"id": id, "name": name})
 }
