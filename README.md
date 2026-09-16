@@ -89,7 +89,8 @@ parameters:
   since strongholds never generate within ~1,280 blocks of spawn.
 
 Matching seeds stream in live with their biome maps (white cross = spawn, red
-pin = stronghold). Tap a seed to copy it. Hover the map to read the block
+pin = stronghold, and a scale bar in the bottom-left corner for judging island
+size at a glance). Tap a seed to copy it. Hover the map to read the block
 coordinates and biome under the cursor.
 
 ## Minecraft 26.3 (Dappled Forest, Sulfur Caves, Abandoned Camp)

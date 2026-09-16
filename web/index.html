@@ -135,6 +135,10 @@
   .maplegend span { display: inline-flex; align-items: center; }
   .maplegend b { color: var(--text); margin-left: 5px; font-variant-numeric: tabular-nums; }
   .maplegend .dotc { width: 9px; height: 9px; border-radius: 50%; display: inline-block; margin-right: 5px; border: 1px solid rgba(255,255,255,.4); }
+  /* Scale bar in the map's bottom-left corner; width is set inline as a % of the map. */
+  .mapscale { position: absolute; left: 8px; bottom: 8px; z-index: 3; pointer-events: none; line-height: 1; text-align: center; font-size: 10px; font-variant-numeric: tabular-nums; }
+  .mapscale .lbl { display: block; margin-bottom: 3px; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.95), 0 0 3px rgba(0,0,0,.9); white-space: nowrap; }
+  .mapscale .bar { height: 5px; border: 2px solid #fff; border-top: 0; box-shadow: 0 1px 2px rgba(0,0,0,.85); }
   .note { width: 100%; margin-top: 10px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; color: var(--text); font: inherit; font-size: 14px; padding: 10px 12px; resize: vertical; min-height: 40px; }
   .note:focus { outline: none; border-color: var(--accent); }
 </style>
@@ -748,6 +752,7 @@
     const cov = document.createElement('img'); cov.className = 'caveoverlay'; cov.alt = ''; cov.style.display = 'none';
     wrap.appendChild(cov);
     applyCaveOverlay(wrap);
+    addScaleBar(wrap, parseInt(m.step, 10) || 4);
 
     const legend = document.createElement('div'); legend.className = 'maplegend';
     wrap._legend = legend;
@@ -857,6 +862,28 @@
   }
   function applyLayerAll() {
     document.querySelectorAll('.mapwrap img:not(.caveoverlay)').forEach(setLayer);
+  }
+
+  // A corner scale bar sized to the map's blocks-per-pixel step. The map is 512px
+  // across, so it spans 512*step blocks; we pick a round distance near a quarter of
+  // that and express the bar's length as a % of the map so it stays right at any
+  // display size.
+  function niceScale(step) {
+    const mapBlocks = 512 * step;
+    const target = mapBlocks / 4;
+    const pow = Math.pow(10, Math.floor(Math.log10(target)));
+    let blocks = pow;
+    for (const c of [1, 2, 2.5, 5, 10]) if (c * pow <= target) blocks = c * pow;
+    const label = blocks >= 1000 ? (blocks / 1000).toLocaleString() + 'k blocks' : fmt(blocks) + ' blocks';
+    return { pct: blocks / mapBlocks * 100, label };
+  }
+  function addScaleBar(wrap, step) {
+    const s = niceScale(step);
+    const el = document.createElement('div');
+    el.className = 'mapscale';
+    el.style.width = s.pct + '%';
+    el.innerHTML = `<span class="lbl">${s.label}</span><div class="bar"></div>`;
+    wrap.appendChild(el);
   }
 
   // Cave-biome outline overlay, stacked over the (surface) map at the chosen depth.
