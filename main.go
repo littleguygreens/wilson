@@ -82,6 +82,7 @@ type Config struct {
 	MinMoat         int
 
 	RejectDividingRiver bool
+	RiverSlicePct       int
 
 	Structures   []int32
 	StructMode   []int32
@@ -262,6 +263,7 @@ func toCConfig(cfg Config) C.ScanConfig {
 	c.minIslandCells = C.int(cfg.MinIslandCells)
 	c.minMoat = C.int(cfg.MinMoat)
 	c.rejectDividingRiver = boolToC(cfg.RejectDividingRiver)
+	c.riverSlicePct = C.int(cfg.RiverSlicePct)
 
 	c.nStructures = putList(&c.structures, cfg.Structures)
 	putList(&c.structMode, cfg.StructMode)
@@ -296,10 +298,11 @@ func main() {
 	oceanReq := flag.String("oceanReq", "", "comma-separated required ocean types for -check")
 	oceanExc := flag.String("oceanExc", "", "comma-separated excluded ocean types for -check")
 	noRiver := flag.Bool("noRiver", false, "reject islands split sea-to-sea by a river, for -check")
+	riverPct := flag.Int("riverPct", 10, "min percent of island a river must strand to reject, for -check")
 	flag.Parse()
 
 	if *check != "" {
-		runCheck(*check, *size, *moat, *oceanReq, *oceanInc, *oceanExc, *noRiver)
+		runCheck(*check, *size, *moat, *oceanReq, *oceanInc, *oceanExc, *noRiver, *riverPct)
 		return
 	}
 
@@ -368,7 +371,7 @@ func repeatMode(mode int32, n int) []int32 {
 // whether it would match. Handy for confirming a build behaves as expected:
 //
 //	./wilson -check <seed> -size L [-moat 300]
-func runCheck(seedStr, size string, moat int, oceanReq, oceanInc, oceanExc string, noRiver bool) {
+func runCheck(seedStr, size string, moat int, oceanReq, oceanInc, oceanExc string, noRiver bool, riverPct int) {
 	seed, err := strconv.ParseInt(seedStr, 10, 64)
 	if err != nil {
 		log.Fatalf("bad seed %q: %v", seedStr, err)
@@ -377,6 +380,7 @@ func runCheck(seedStr, size string, moat int, oceanReq, oceanInc, oceanExc strin
 	cfg.RequireEnclosed = true
 	cfg.MinMoat = moat
 	cfg.RejectDividingRiver = noRiver
+	cfg.RiverSlicePct = riverPct
 	cfg.Ocean, cfg.OceanMode = triSelection(oceanReq, oceanInc, oceanExc, biomeKeyToID)
 	if moat > 0 { // mirror the server's window growth
 		if needed := cfg.IslandRadius + moat + 4*cfg.IslandStep; needed > cfg.IslandWindow {

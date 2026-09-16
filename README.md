@@ -28,7 +28,13 @@ parameters:
 
 - **Island size** S → XXL. Bigger sizes push the surrounding ocean farther
   out and zoom the map so the whole landmass fits. **XXL ("continent")** is a
-  large isolated landmass rather than a small island.
+  large isolated landmass rather than a small island. Each size button is a
+  shortcut that loads the six **Fine-tune size & isolation** sliders — island
+  radius, min land in view, min island size, inner ocean ring, outer isolation
+  ring (0 disables a ring), and map zoom — so you can dial in an exact target
+  and the button just seeds sensible starting values. The sliders drive the
+  search; the coupled internals (sampling steps, ring sample counts) follow the
+  chosen size's profile.
 - **Island biomes** — tap each biome to cycle its state: **include** (an
   any-of group — at least one included biome must appear), **require** (must
   appear), or **exclude** (must not appear).
@@ -73,9 +79,11 @@ parameters:
 - **Rivers** — an optional toggle to reject a spawn island a river cuts clean
   through, sea to sea, which otherwise reads as two islands. Rivers normally
   count as land (only ocean isolates), so this re-runs the island flood fill with
-  river cells as barriers and rejects the seed when a substantial share of the
-  land is stranded on the far side. A river that only reaches partway in and
-  dead-ends leaves the land joined around its tip, so it is kept.
+  river cells as barriers and rejects the seed when a river strands at least a
+  chosen share of the land on the far side — a slider from 5% (strict, rejects
+  thin slices) to 50% (only near-even bisections), default 10%. A river that only
+  reaches partway in and dead-ends leaves the land joined around its tip, so it
+  is kept.
 - **Stronghold** — optionally require the nearest first-ring stronghold to sit
   on the island's land within a chosen distance. Realistic only at Huge/XXL,
   since strongholds never generate within ~1,280 blocks of spawn.

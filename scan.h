@@ -75,6 +75,12 @@ typedef struct {
      * rejected. Uses the same window/step as the enclosure check. */
     int rejectDividingRiver;
 
+    /* Minimum share (percent) of the spawn island's land a river must strand on
+     * the far side to reject the seed (only used when rejectDividingRiver is set).
+     * Lower = stricter (rejects thinner slices); higher only rejects near-even
+     * bisections. */
+    int riverSlicePct;
+
     /* Structures (cubiomes StructureType) and their modes. Presence = a viable
      * instance within structRadius blocks of spawn. */
     int structures[SCAN_MAX_LIST];

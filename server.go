@@ -33,21 +33,26 @@ const (
 // XXL ("continent") drops the inner ring (spawn is deep inland) and leans on the
 // far outer ring plus a high land floor.
 type sizePreset struct {
-	Key            string `json:"key"`
-	Label          string `json:"label"`
-	IslandRadius   int    `json:"-"`
-	GridStep       int    `json:"-"`
-	MinLandPercent int    `json:"-"`
-	RingRadius     int    `json:"-"`
-	RingSamples    int    `json:"-"`
-	RingMinOcean   int    `json:"-"`
-	OuterRadius    int    `json:"-"`
-	OuterSamples   int    `json:"-"`
-	OuterMinOcean  int    `json:"-"`
-	IslandWindow   int    `json:"-"`
-	IslandStep     int    `json:"-"`
-	MinIslandCells int    `json:"-"`
-	MapStep        int    `json:"-"`
+	Key   string `json:"key"`
+	Label string `json:"label"`
+	// The six fields the UI exposes as sliders (a preset button sets the sliders
+	// to these). IslandStep is sent too, only so the client can show the min-cells
+	// slider's block-width equivalent; it is not itself a slider.
+	IslandRadius   int `json:"islandRadius"`
+	MinLandPercent int `json:"minLandPercent"`
+	MinIslandCells int `json:"minIslandCells"`
+	RingRadius     int `json:"ringRadius"`
+	OuterRadius    int `json:"outerRadius"`
+	MapStep        int `json:"mapStep"`
+	IslandStep     int `json:"islandStep"`
+	// Derived internals the client never touches; recomputed server-side when a
+	// slider overrides a size field.
+	GridStep      int `json:"-"`
+	RingSamples   int `json:"-"`
+	RingMinOcean  int `json:"-"`
+	OuterSamples  int `json:"-"`
+	OuterMinOcean int `json:"-"`
+	IslandWindow  int `json:"-"`
 }
 
 var sizePresets = []sizePreset{
@@ -242,6 +247,36 @@ func configFromQuery(r *http.Request) Config {
 	q := r.URL.Query()
 	cfg := geometryForSize(q.Get("size"))
 
+	// Geometry sliders override the size preset's baseline for the six exposed
+	// fields. The coupled internals (sampling steps, ring sample counts and their
+	// ocean thresholds, the flood-fill window) stay from the baseline and are only
+	// nudged below where an override needs them to.
+	cfg.IslandRadius = clampInt(queryInt(r, "iRadius", cfg.IslandRadius), 40, 2000)
+	cfg.MinLandPercent = clampInt(queryInt(r, "landPct", cfg.MinLandPercent), 0, 100)
+	cfg.MinIslandCells = clampInt(queryInt(r, "minCells", cfg.MinIslandCells), 0, 100000)
+	cfg.MapStep = clampInt(queryInt(r, "mapStep", cfg.MapStep), 1, 32)
+
+	// Rings are enabled/disabled by their radius; injecting sample defaults when a
+	// ring the baseline left off (e.g. Continent's inner ring) is switched on.
+	cfg.RingRadius = clampInt(queryInt(r, "ringR", cfg.RingRadius), 0, 4000)
+	if cfg.RingRadius == 0 {
+		cfg.RingSamples, cfg.RingMinOcean = 0, 0
+	} else if cfg.RingSamples == 0 {
+		cfg.RingSamples, cfg.RingMinOcean = 40, 34
+	}
+	cfg.OuterRadius = clampInt(queryInt(r, "outerR", cfg.OuterRadius), 0, 6000)
+	if cfg.OuterRadius == 0 {
+		cfg.OuterSamples, cfg.OuterMinOcean = 0, 0
+	} else if cfg.OuterSamples == 0 {
+		cfg.OuterSamples, cfg.OuterMinOcean = 48, 38
+	}
+
+	// Keep the footprint sample grid bounded when a large radius is dialled onto a
+	// small baseline (n = 2*radius/gridStep + 1 must stay reasonable for speed).
+	if g := evenUp((cfg.IslandRadius + 39) / 40); g > cfg.GridStep {
+		cfg.GridStep = g
+	}
+
 	cfg.Surface, cfg.SurfaceMode = triSelection(q.Get("surfaceReq"), q.Get("surfaceInc"), q.Get("surfaceExc"), biomeKeyToID)
 	cfg.Ocean, cfg.OceanMode = triSelection(q.Get("oceanReq"), q.Get("oceanInc"), q.Get("oceanExc"), biomeKeyToID)
 	cfg.Cave, cfg.CaveMode = triSelection(q.Get("caveReq"), q.Get("caveInc"), q.Get("caveExc"), biomeKeyToID)
@@ -262,6 +297,7 @@ func configFromQuery(r *http.Request) Config {
 	}
 
 	cfg.RejectDividingRiver = q.Get("noRiver") == "1"
+	cfg.RiverSlicePct = clampInt(queryInt(r, "riverPct", 10), 5, 50)
 
 	// Full-enclosure flood fill is always on: results are never peninsulas.
 	cfg.RequireEnclosed = true
@@ -269,15 +305,13 @@ func configFromQuery(r *http.Request) Config {
 	if cfg.MinMoat < 0 {
 		cfg.MinMoat = 0
 	}
-	// Grow the flood-fill window so the requested moat actually fits inside it,
-	// capped so the grid can't blow up.
-	if cfg.RequireEnclosed && cfg.MinMoat > 0 {
-		if needed := cfg.IslandRadius + cfg.MinMoat + 4*cfg.IslandStep; needed > cfg.IslandWindow {
-			cfg.IslandWindow = needed
-		}
-		if cfg.IslandWindow > maxIslandWindow {
-			cfg.IslandWindow = maxIslandWindow
-		}
+	// Grow the flood-fill window so the island and the requested moat both fit
+	// inside it (a large radius slider needs this too), capped so it can't blow up.
+	if needed := cfg.IslandRadius + cfg.MinMoat + 4*cfg.IslandStep; needed > cfg.IslandWindow {
+		cfg.IslandWindow = needed
+	}
+	if cfg.IslandWindow > maxIslandWindow {
+		cfg.IslandWindow = maxIslandWindow
 	}
 	return cfg
 }
@@ -335,8 +369,13 @@ func scanHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		return fmt.Sprintf("inc=[%s] req=[%s] exc=[%s]", inc, req, exc)
 	}
-	log.Printf("scan: size=%s moat=%s | ocean %s | surface %s | cave %s | struct %s",
-		q.Get("size"), q.Get("moat"), tri("ocean"), tri("surface"), tri("cave"), tri("struct"))
+	riverStr := "-"
+	if cfg.RejectDividingRiver {
+		riverStr = fmt.Sprintf(">=%d%%", cfg.RiverSlicePct)
+	}
+	log.Printf("scan: r=%d land>=%d%% cells>=%d rings=%d/%d zoom=%d moat=%d river=%s | ocean %s | surface %s | cave %s | struct %s",
+		cfg.IslandRadius, cfg.MinLandPercent, cfg.MinIslandCells, cfg.RingRadius, cfg.OuterRadius,
+		cfg.MapStep, cfg.MinMoat, riverStr, tri("ocean"), tri("surface"), tri("cave"), tri("struct"))
 
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -510,4 +549,23 @@ func queryInt(r *http.Request, key string, def int) int {
 		return def
 	}
 	return n
+}
+
+func clampInt(v, lo, hi int) int {
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
+}
+
+// evenUp rounds up to the next even number (grid steps stay even so the centred
+// odd-sized sample grids line up).
+func evenUp(v int) int {
+	if v%2 != 0 {
+		v++
+	}
+	return v
 }

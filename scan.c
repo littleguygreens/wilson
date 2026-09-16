@@ -325,13 +325,12 @@ static void island_metrics(Generator *g, int window, int step,
  * the largest chunk of island land left unreachable: a river running fully across
  * strands one side, while a river that only poks in from the sea and dead-ends
  * leaves the land joined around its tip. We flag the seed only when the stranded
- * side is a meaningful share of the island (a tenth), so a channel shaving a
- * small nub off the coast doesn't reject an otherwise good island. Centred on
- * (0,0), which an earlier check has already confirmed is land. Returns 1 to
- * reject. */
-static int river_divides(Generator *g, int window, int step)
+ * side is at least slicePct of the island, so a channel shaving a small nub off
+ * the coast doesn't reject an otherwise good island. Centred on (0,0), which an
+ * earlier check has already confirmed is land. Returns 1 to reject. */
+static int river_divides(Generator *g, int window, int step, int slicePct)
 {
-    if (window <= 0 || step <= 0)
+    if (window <= 0 || step <= 0 || slicePct <= 0)
         return 0;
     int n = 2 * (window / step) + 1;
     int c = n / 2;
@@ -388,7 +387,7 @@ static int river_divides(Generator *g, int window, int step)
 
     /* Largest land component stranded on the far side of a river. */
     int worst = 0;
-    for (int s = 0; s < n * n && worst * 10 < totalLand; s++) {
+    for (int s = 0; s < n * n && worst * 100 < totalLand * slicePct; s++) {
         if (mark[s] != 1 || cell[s] != 1) continue;   /* unreached blob land */
         top = 0; mark[s] = 3; stk[top++] = s;
         int size = 1;
@@ -408,7 +407,7 @@ static int river_divides(Generator *g, int window, int step)
 
     free(cell); free(mark); free(stk);
     (void)mainLand;
-    return totalLand > 0 && worst * 10 >= totalLand;  /* >= 10% stranded -> reject */
+    return totalLand > 0 && worst * 100 >= totalLand * slicePct;  /* stranded >= slicePct% -> reject */
 }
 
 /* One pass over the island footprint at gridStep resolution. Counts land over
@@ -611,7 +610,7 @@ ScanResult scanner_check(void *s, uint64_t seed, const ScanConfig *cfg)
     /* 5b-2. Reject islands a river cuts sea-to-sea (they look like two islands).
      *       Uses the enclosure window/step, so it needs those set. */
     if (cfg->rejectDividingRiver && cfg->islandWindow > 0 && cfg->islandStep > 0 &&
-        river_divides(g, cfg->islandWindow, cfg->islandStep))
+        river_divides(g, cfg->islandWindow, cfg->islandStep, cfg->riverSlicePct))
         return r;
 
     /* 5c. Structure requirements: required present, excluded absent, and at

@@ -165,6 +165,35 @@
       <div id="sizeHint" class="hint"></div>
     </div>
 
+    <div class="group collapsible" data-sec="sizefine">
+      <div class="glabel"><span>Fine-tune size &amp; isolation</span></div>
+      <div class="hint">The size buttons above set these; nudge any slider for exact control.</div>
+      <div style="margin-top:12px">
+        <label class="fl">Island radius: <b id="iRadiusVal"></b></label>
+        <input id="iRadius" type="range" min="80" max="1600" step="20">
+      </div>
+      <div style="margin-top:12px">
+        <label class="fl">Min land in view: <b id="landPctVal"></b></label>
+        <input id="landPct" type="range" min="10" max="90" step="5">
+      </div>
+      <div style="margin-top:12px">
+        <label class="fl">Min island size: <b id="minCellsVal"></b></label>
+        <input id="minCells" type="range" min="10" max="400" step="10">
+      </div>
+      <div style="margin-top:12px">
+        <label class="fl">Inner ocean ring: <b id="ringRVal"></b></label>
+        <input id="ringR" type="range" min="0" max="1600" step="20">
+      </div>
+      <div style="margin-top:12px">
+        <label class="fl">Outer isolation ring: <b id="outerRVal"></b></label>
+        <input id="outerR" type="range" min="0" max="3000" step="50">
+      </div>
+      <div style="margin-top:12px">
+        <label class="fl">Map zoom: <b id="mapStepVal"></b></label>
+        <input id="mapStep" type="range" min="1" max="20" step="1">
+      </div>
+    </div>
+
     <div class="trilegend">Chips cycle: <span class="k off">off</span> → <span class="k inc">＋ include</span> → <span class="k req">★ require</span> → <span class="k exc">✕ exclude</span></div>
 
     <div class="group collapsible" data-sec="biomes">
@@ -208,6 +237,11 @@
       <div class="glabel"><span>Rivers</span></div>
       <label class="sw"><input type="checkbox" id="noRiver"> Exclude islands split by a river</label>
       <div class="hint">Rejects a spawn island a river cuts clean through, sea-to-sea, so it looks like two islands. A river that only reaches partway in is kept.</div>
+      <div id="riverPctWrap" class="hidden" style="margin-top:12px">
+        <label class="fl">Reject when a river slices off ≥ <b id="riverPctVal">10%</b></label>
+        <input id="riverPct" type="range" min="5" max="50" step="5" value="10">
+        <div class="hint">Lower is stricter (rejects thinner slices); higher only rejects near-even splits.</div>
+      </div>
     </div>
 
     <div class="group collapsible" data-sec="stronghold">
@@ -297,23 +331,26 @@
 
   function setup(d) {
     state.sizes = d.sizes;
-    // size segmented control
+    // size segmented control -- each button sets the fine-tune sliders below
     const seg = $('sizes'); seg.innerHTML = '';
     d.sizes.forEach(s => {
       const b = document.createElement('button');
       b.textContent = s.key; b.dataset.key = s.key;
       if (s.key === state.size) b.classList.add('on');
-      b.onclick = () => { state.size = s.key; [...seg.children].forEach(c => c.classList.toggle('on', c.dataset.key === s.key)); updateSizeHint(); };
+      b.onclick = () => setSize(s.key);
       seg.appendChild(b);
     });
-    updateSizeHint();
+    // fine-tune sliders just relabel + rebadge on input (they carry their own value)
+    SIZE_SLIDERS.forEach(id => $(id).oninput = () => { refreshSliderLabels(); updateBadges(); });
+    setSize(state.size); // populate sliders + labels from the default preset
     state.surfaceOpts = d.surface;
     state.caveOpts = d.cave;
     state.structs = d.structures;
     buildChips();
     buildTriChips('ocean', d.ocean, state.oceanSel);
     $('stronghold').onchange = () => { $('shWrap').classList.toggle('hidden', !$('stronghold').checked); updateBadges(); };
-    $('noRiver').onchange = updateBadges;
+    $('noRiver').onchange = () => { $('riverPctWrap').classList.toggle('hidden', !$('noRiver').checked); updateBadges(); };
+    $('riverPct').oninput = () => $('riverPctVal').textContent = $('riverPct').value + '%';
     $('shDist').oninput = () => $('shVal').textContent = $('shDist').value;
     $('moat').oninput = () => { $('moatVal').textContent = ($('moat').value === '0') ? 'any' : fmt($('moat').value) + ' blocks'; updateBadges(); };
     const syncCaveDepth = () => $('caveYWrap').classList.toggle('hidden', !(state.caveView || state.caveOutline));
@@ -339,7 +376,7 @@
 
   // ---- collapsible sections + active badges -------------------------------
   const COLLAPSE_KEY = 'wilson.collapsed';
-  const DEFAULT_COLLAPSED = ['ocean', 'caves', 'structures', 'isolation', 'rivers', 'stronghold', 'mapdisplay'];
+  const DEFAULT_COLLAPSED = ['sizefine', 'ocean', 'caves', 'structures', 'isolation', 'rivers', 'stronghold', 'mapdisplay'];
 
   function setupCollapsibles() {
     let saved = null;
@@ -360,6 +397,7 @@
   // so folding a section never hides that it's in use.
   function updateBadges() {
     const active = {
+      sizefine: sizeSlidersDiffer(),
       biomes: state.surfSel.size > 0,
       ocean: state.oceanSel.size > 0,
       caves: state.caveSel.size > 0,
@@ -440,8 +478,11 @@
   }
 
   function captureConfig() {
+    const geom = {};
+    SIZE_SLIDERS.forEach(id => geom[id] = parseInt($(id).value, 10));
     return {
       size: state.size,
+      geom: geom,
       surf: objFromMap(state.surfSel),
       ocean: objFromMap(state.oceanSel),
       cave: objFromMap(state.caveSel),
@@ -449,6 +490,7 @@
       minCave: parseInt($('minCave').value, 10) || 3,
       moat: parseInt($('moat').value, 10) || 0,
       noRiver: $('noRiver').checked ? 1 : 0,
+      riverPct: parseInt($('riverPct').value, 10) || 10,
       stronghold: $('stronghold').checked ? 1 : 0,
       shDist: parseInt($('shDist').value, 10) || 1700,
       n: parseInt($('n').value, 10) || 5,
@@ -472,9 +514,13 @@
     buildChips();
     state.structSel = migrateSel(p.struct, p.structures, false); paintTri('reqStructs', state.structSel);
     state.oceanSel = migrateSel(Array.isArray(p.ocean) ? null : p.ocean, Array.isArray(p.ocean) ? p.ocean : null, false); paintTri('ocean', state.oceanSel);
+    // Restore the fine-tune sliders over the preset baseline setSize() just set.
+    if (p.geom) { SIZE_SLIDERS.forEach(id => { if (p.geom[id] != null) $(id).value = p.geom[id]; }); refreshSliderLabels(); }
     $('minCave').value = p.minCave || 3;
     $('moat').value = p.moat || 0; $('moat').oninput();
     $('noRiver').checked = !!p.noRiver;
+    $('riverPct').value = p.riverPct || 10; $('riverPct').oninput();
+    $('riverPctWrap').classList.toggle('hidden', !$('noRiver').checked);
     $('stronghold').checked = !!p.stronghold; $('shWrap').classList.toggle('hidden', !$('stronghold').checked);
     $('shDist').value = p.shDist || 1700; $('shDist').oninput();
     $('n').value = p.n || 5;
@@ -488,10 +534,44 @@
     [...$(cat).children].forEach(c => c.classList.toggle('on', set.has(c.dataset.key)));
   }
 
+  // The six geometry sliders (source of truth for their fields; a size button
+  // just loads the chosen preset's values into them).
+  const SIZE_SLIDERS = ['iRadius', 'landPct', 'minCells', 'ringR', 'outerR', 'mapStep'];
+  function presetByKey(key) { return (state.sizes || []).find(s => s.key === key) || (state.sizes || [])[1] || {}; }
+  // True when the sliders have been nudged off the selected size preset's values.
+  function sizeSlidersDiffer() {
+    if (!(state.sizes || []).length) return false;
+    const p = presetByKey(state.size);
+    return $('iRadius').value != p.islandRadius || $('landPct').value != p.minLandPercent ||
+      $('minCells').value != p.minIslandCells || $('ringR').value != p.ringRadius ||
+      $('outerR').value != p.outerRadius || $('mapStep').value != p.mapStep;
+  }
+
   function setSize(key) {
-    state.size = key;
+    const p = presetByKey(key);
+    state.size = key;                 // the baseline profile (drives the derived internals)
+    state.islandStep = p.islandStep || 4;
     [...$('sizes').children].forEach(c => c.classList.toggle('on', c.dataset.key === key));
+    $('iRadius').value = p.islandRadius;
+    $('landPct').value = p.minLandPercent;
+    $('minCells').value = p.minIslandCells;
+    $('ringR').value = p.ringRadius;
+    $('outerR').value = p.outerRadius;
+    $('mapStep').value = p.mapStep;
+    refreshSliderLabels();
     updateSizeHint();
+    updateBadges();
+  }
+  function refreshSliderLabels() {
+    $('iRadiusVal').textContent = fmt($('iRadius').value) + ' blocks';
+    $('landPctVal').textContent = $('landPct').value + '%';
+    const cells = parseInt($('minCells').value, 10) || 0;
+    const wide = Math.round(2 * Math.sqrt(cells / Math.PI) * (state.islandStep || 4));
+    $('minCellsVal').textContent = cells + ' cells (≈ ' + fmt(wide) + ' blocks wide)';
+    $('ringRVal').textContent = $('ringR').value === '0' ? 'off' : fmt($('ringR').value) + ' blocks';
+    $('outerRVal').textContent = $('outerR').value === '0' ? 'off' : fmt($('outerR').value) + ' blocks';
+    const ms = parseInt($('mapStep').value, 10) || 4;
+    $('mapStepVal').textContent = ms + ' blocks/px' + (ms <= 2 ? ' — closest' : ms >= 16 ? ' — widest' : '');
   }
   function buildChips() {
     buildTriChips('surface', state.surfaceOpts, state.surfSel);
@@ -567,7 +647,8 @@
     setTri('struct', state.structSel);
     if ($('stronghold').checked) { p.set('stronghold', '1'); p.set('shDist', $('shDist').value); }
     if ($('moat').value !== '0') p.set('moat', $('moat').value);
-    if ($('noRiver').checked) p.set('noRiver', '1');
+    if ($('noRiver').checked) { p.set('noRiver', '1'); p.set('riverPct', $('riverPct').value); }
+    addGeom(p);
 
     $('results').innerHTML = '';
     $('empty').classList.add('hidden');
@@ -592,6 +673,16 @@
     $('results').prepend(makeCard(m, false));
   }
 
+  // Append the six geometry-slider values to a query (used by scan and view-seed).
+  function addGeom(p) {
+    p.set('iRadius', $('iRadius').value);
+    p.set('landPct', $('landPct').value);
+    p.set('minCells', $('minCells').value);
+    p.set('ringR', $('ringR').value);
+    p.set('outerR', $('outerR').value);
+    p.set('mapStep', $('mapStep').value);
+  }
+
   // viewSeed opens one explicit seed as a card (no scan), at the current size.
   // Useful for inspecting a seed you already know.
   function viewSeed() {
@@ -599,6 +690,7 @@
     if (!/^-?\d+$/.test(raw)) { alert('Enter a numeric seed.'); return; }
     const p = new URLSearchParams({ seed: raw, size: state.size });
     if ($('moat').value !== '0') p.set('moat', $('moat').value);
+    addGeom(p);
     const btn = $('viewBtn'); btn.disabled = true; btn.textContent = '…';
     fetch('/api/inspect?' + p.toString())
       .then(r => r.ok ? r.json() : Promise.reject())
