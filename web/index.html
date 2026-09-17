@@ -192,10 +192,6 @@
         <label class="fl">Outer isolation ring: <b id="outerRVal"></b></label>
         <input id="outerR" type="range" min="0" max="3000" step="50">
       </div>
-      <div style="margin-top:12px">
-        <label class="fl">Map zoom: <b id="mapStepVal"></b></label>
-        <input id="mapStep" type="range" min="1" max="20" step="1">
-      </div>
     </div>
 
     <div class="trilegend">Chips cycle: <span class="k off">off</span> → <span class="k inc">＋ include</span> → <span class="k req">★ require</span> → <span class="k exc">✕ exclude</span></div>
@@ -538,9 +534,10 @@
     [...$(cat).children].forEach(c => c.classList.toggle('on', set.has(c.dataset.key)));
   }
 
-  // The six geometry sliders (source of truth for their fields; a size button
-  // just loads the chosen preset's values into them).
-  const SIZE_SLIDERS = ['iRadius', 'landPct', 'minCells', 'ringR', 'outerR', 'mapStep'];
+  // The geometry sliders (source of truth for their fields; a size button just
+  // loads the chosen preset's values into them). Map zoom is not among them --
+  // it follows the island radius, set server-side.
+  const SIZE_SLIDERS = ['iRadius', 'landPct', 'minCells', 'ringR', 'outerR'];
   function presetByKey(key) { return (state.sizes || []).find(s => s.key === key) || (state.sizes || [])[1] || {}; }
   // True when the sliders have been nudged off the selected size preset's values.
   function sizeSlidersDiffer() {
@@ -548,7 +545,7 @@
     const p = presetByKey(state.size);
     return $('iRadius').value != p.islandRadius || $('landPct').value != p.minLandPercent ||
       $('minCells').value != p.minIslandCells || $('ringR').value != p.ringRadius ||
-      $('outerR').value != p.outerRadius || $('mapStep').value != p.mapStep;
+      $('outerR').value != p.outerRadius;
   }
 
   function setSize(key) {
@@ -561,7 +558,6 @@
     $('minCells').value = p.minIslandCells;
     $('ringR').value = p.ringRadius;
     $('outerR').value = p.outerRadius;
-    $('mapStep').value = p.mapStep;
     refreshSliderLabels();
     updateSizeHint();
     updateBadges();
@@ -574,8 +570,6 @@
     $('minCellsVal').textContent = cells + ' cells (≈ ' + fmt(wide) + ' blocks wide)';
     $('ringRVal').textContent = $('ringR').value === '0' ? 'off' : fmt($('ringR').value) + ' blocks';
     $('outerRVal').textContent = $('outerR').value === '0' ? 'off' : fmt($('outerR').value) + ' blocks';
-    const ms = parseInt($('mapStep').value, 10) || 4;
-    $('mapStepVal').textContent = ms + ' blocks/px' + (ms <= 2 ? ' — closest' : ms >= 16 ? ' — widest' : '');
   }
   function buildChips() {
     buildTriChips('surface', state.surfaceOpts, state.surfSel);
@@ -677,14 +671,14 @@
     $('results').prepend(makeCard(m, false));
   }
 
-  // Append the six geometry-slider values to a query (used by scan and view-seed).
+  // Append the geometry-slider values to a query (used by scan and view-seed).
+  // Map zoom is derived from the radius server-side, so it is not sent.
   function addGeom(p) {
     p.set('iRadius', $('iRadius').value);
     p.set('landPct', $('landPct').value);
     p.set('minCells', $('minCells').value);
     p.set('ringR', $('ringR').value);
     p.set('outerR', $('outerR').value);
-    p.set('mapStep', $('mapStep').value);
   }
 
   // viewSeed opens one explicit seed as a card (no scan), at the current size.

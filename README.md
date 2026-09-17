@@ -29,12 +29,12 @@ parameters:
 - **Island size** S → XXL. Bigger sizes push the surrounding ocean farther
   out and zoom the map so the whole landmass fits. **XXL ("continent")** is a
   large isolated landmass rather than a small island. Each size button is a
-  shortcut that loads the six **Fine-tune size & isolation** sliders — island
-  radius, min land in view, min island size, inner ocean ring, outer isolation
-  ring (0 disables a ring), and map zoom — so you can dial in an exact target
-  and the button just seeds sensible starting values. The sliders drive the
-  search; the coupled internals (sampling steps, ring sample counts) follow the
-  chosen size's profile.
+  shortcut that loads the five **Fine-tune size & isolation** sliders — island
+  radius, min land in view, min island size, inner ocean ring, and outer isolation
+  ring (0 disables a ring) — so you can dial in an exact target and the button
+  just seeds sensible starting values. The sliders drive the search; the coupled
+  internals (sampling steps, ring sample counts, and the map zoom, which tracks the
+  island radius so the find always fills the preview) follow automatically.
 - **Island biomes** — tap each biome to cycle its state: **include** (an
   any-of group — at least one included biome must appear), **require** (must
   appear), or **exclude** (must not appear).

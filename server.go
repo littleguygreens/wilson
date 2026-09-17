@@ -35,7 +35,7 @@ const (
 type sizePreset struct {
 	Key   string `json:"key"`
 	Label string `json:"label"`
-	// The six fields the UI exposes as sliders (a preset button sets the sliders
+	// The size fields the UI exposes as sliders (a preset button sets the sliders
 	// to these). IslandStep is sent too, only so the client can show the min-cells
 	// slider's block-width equivalent; it is not itself a slider.
 	IslandRadius   int `json:"islandRadius"`
@@ -43,10 +43,10 @@ type sizePreset struct {
 	MinIslandCells int `json:"minIslandCells"`
 	RingRadius     int `json:"ringRadius"`
 	OuterRadius    int `json:"outerRadius"`
-	MapStep        int `json:"mapStep"`
 	IslandStep     int `json:"islandStep"`
-	// Derived internals the client never touches; recomputed server-side when a
-	// slider overrides a size field.
+	// Derived internals the client never touches; recomputed server-side. MapStep
+	// now follows the island radius, so it is not exposed either.
+	MapStep       int `json:"-"`
 	GridStep      int `json:"-"`
 	RingSamples   int `json:"-"`
 	RingMinOcean  int `json:"-"`
@@ -254,7 +254,10 @@ func configFromQuery(r *http.Request) Config {
 	cfg.IslandRadius = clampInt(queryInt(r, "iRadius", cfg.IslandRadius), 40, 2000)
 	cfg.MinLandPercent = clampInt(queryInt(r, "landPct", cfg.MinLandPercent), 0, 100)
 	cfg.MinIslandCells = clampInt(queryInt(r, "minCells", cfg.MinIslandCells), 0, 100000)
-	cfg.MapStep = clampInt(queryInt(r, "mapStep", cfg.MapStep), 1, 32)
+	// Map zoom follows the island radius (round(radius/50), capped) so the found
+	// island always fills the preview -- it reproduces the size presets' zoom and
+	// tracks the radius slider without a control of its own.
+	cfg.MapStep = clampInt((cfg.IslandRadius+25)/50, 1, 16)
 
 	// Rings are enabled/disabled by their radius; injecting sample defaults when a
 	// ring the baseline left off (e.g. Continent's inner ring) is switched on.
