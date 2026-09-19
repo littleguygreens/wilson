@@ -68,6 +68,11 @@ parameters:
   (a Y slider, default y = -50, the depth the search samples) so cave biomes
   (lush / dripstone / deep dark) show as swaths. Since biomes are 3D, it is a
   single horizontal slice; move the slider to see other depths.
+- **Search area outlines** — a toggle draws the currently specified island radius
+  and the inner and outer ocean rings as colour-coded circles centred on spawn
+  (the map centre), so you can see the geometry your sliders describe against any
+  island. They are lightweight SVG overlays drawn at each map's scale and update
+  live as you drag the size sliders; a ring set to 0 (off) is not drawn.
 - **Isolation** (always on) — flood-fills the land connected to spawn and
   rejects it if that blob reaches the edge of the search window, i.e. it is
   joined to a mainland by a land bridge. This catches peninsulas of any width

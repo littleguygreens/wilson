@@ -130,6 +130,7 @@
   .mapwrap { position: relative; margin-top: 10px; line-height: 0; }
   .mapwrap img { margin-top: 0; }
   .card img.caveoverlay { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; background: transparent; border-radius: 10px; pointer-events: none; }
+  .geomoverlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; filter: drop-shadow(0 0 1px rgba(0,0,0,.9)); }
   .smark { position: absolute; width: 11px; height: 11px; border-radius: 50%; border: 1.5px solid #0b0e12; transform: translate(-50%, -50%); box-shadow: 0 0 0 1px rgba(255,255,255,.45); cursor: pointer; }
   .maplegend { display: none; flex-wrap: wrap; gap: 5px 12px; margin-top: 9px; font-size: 12px; color: var(--muted); }
   .maplegend span { display: inline-flex; align-items: center; }
@@ -267,6 +268,13 @@
         <span style="color:#35c9d6">■ Deep Dark</span> ·
         <span style="color:#e3ce3a">■ Sulfur</span>
       </div>
+      <label class="sw" style="margin-top:10px"><input type="checkbox" id="geomOutline"> Search area outlines (radius &amp; rings)</label>
+      <div id="geomLegend" class="hint" style="display:none;margin-top:8px">
+        Circles centred on spawn:
+        <span style="color:#f0a83a">◯ Island radius</span> ·
+        <span style="color:#57c7ff">◯ Inner ring</span> ·
+        <span style="color:#3a86e0">◯ Outer ring</span>
+      </div>
       <div id="caveYWrap" class="hidden" style="margin-top:10px">
         <label class="fl">Depth: <b id="caveYVal">y = -50</b></label>
         <input id="caveY" type="range" min="-64" max="64" step="2" value="-50">
@@ -322,7 +330,7 @@
 <script>
   const $ = (id) => document.getElementById(id);
   let es = null;
-  const state = { size: 'M', sizes: [], structs: [], surfaceOpts: [], showStructs: new Set(), caveView: false, caveOutline: false, caveY: -50,
+  const state = { size: 'M', sizes: [], structs: [], surfaceOpts: [], showStructs: new Set(), caveView: false, caveOutline: false, geomOutline: false, caveY: -50,
     surfSel: new Map(), oceanSel: new Map(), caveSel: new Map(), structSel: new Map() };
 
   fetch('/api/biomes').then(r => r.json()).then(setup).catch(() => {
@@ -341,7 +349,7 @@
       seg.appendChild(b);
     });
     // fine-tune sliders just relabel + rebadge on input (they carry their own value)
-    SIZE_SLIDERS.forEach(id => $(id).oninput = () => { refreshSliderLabels(); updateBadges(); });
+    SIZE_SLIDERS.forEach(id => $(id).oninput = () => { refreshSliderLabels(); updateBadges(); if (state.geomOutline) applyGeomOverlayAll(); });
     setSize(state.size); // populate sliders + labels from the default preset
     state.surfaceOpts = d.surface;
     state.caveOpts = d.cave;
@@ -364,6 +372,11 @@
       $('caveLegend').style.display = state.caveOutline ? '' : 'none';
       syncCaveDepth();
       applyCaveOverlayAll(); updateBadges();
+    };
+    $('geomOutline').onchange = () => {
+      state.geomOutline = $('geomOutline').checked;
+      $('geomLegend').style.display = state.geomOutline ? '' : 'none';
+      applyGeomOverlayAll(); updateBadges();
     };
     $('caveY').oninput = () => { state.caveY = parseInt($('caveY').value, 10); $('caveYVal').textContent = 'y = ' + state.caveY; };
     $('caveY').onchange = () => { if (state.caveView) applyLayerAll(); if (state.caveOutline) applyCaveOverlayAll(); };
@@ -405,7 +418,7 @@
       isolation: (parseInt($('moat').value, 10) || 0) > 0,
       rivers: $('noRiver').checked,
       stronghold: $('stronghold').checked,
-      mapdisplay: state.showStructs.size > 0 || state.caveView || state.caveOutline,
+      mapdisplay: state.showStructs.size > 0 || state.caveView || state.caveOutline || state.geomOutline,
     };
     document.querySelectorAll('.group.collapsible').forEach(g => g.classList.toggle('active', !!active[g.dataset.sec]));
   }
@@ -746,6 +759,7 @@
     const cov = document.createElement('img'); cov.className = 'caveoverlay'; cov.alt = ''; cov.style.display = 'none';
     wrap.appendChild(cov);
     applyCaveOverlay(wrap);
+    applyGeomOverlay(wrap);
     addScaleBar(wrap, parseInt(m.step, 10) || 4);
 
     const legend = document.createElement('div'); legend.className = 'maplegend';
@@ -890,6 +904,36 @@
   }
   function applyCaveOverlayAll() {
     document.querySelectorAll('.mapwrap').forEach(applyCaveOverlay);
+  }
+
+  // Search-area outlines: circles for the currently specified island radius and
+  // ocean rings, centred on spawn (block 0,0 = the map centre). Drawn client-side
+  // as an SVG at each map's own scale (blocks / step); a ring set to 0 is off.
+  const GEOM_RINGS = [
+    { id: 'iRadius', color: '#f0a83a' },  // island radius
+    { id: 'ringR', color: '#57c7ff' },    // inner ocean ring
+    { id: 'outerR', color: '#3a86e0' },   // outer ocean ring
+  ];
+  function applyGeomOverlay(wrap) {
+    let svg = wrap.querySelector('.geomoverlay');
+    if (!state.geomOutline) { if (svg) svg.remove(); return; }
+    const step = parseInt(wrap.dataset.step, 10) || 4;
+    const circles = GEOM_RINGS.map(g => {
+      const blocks = parseInt($(g.id).value, 10) || 0;
+      if (blocks <= 0) return '';
+      return `<circle cx="256" cy="256" r="${blocks / step}" fill="none" stroke="${g.color}" stroke-width="2" />`;
+    }).join('');
+    if (!svg) {
+      svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('class', 'geomoverlay');
+      svg.setAttribute('viewBox', '0 0 512 512');
+      svg.setAttribute('preserveAspectRatio', 'none');
+      wrap.appendChild(svg);
+    }
+    svg.innerHTML = circles;
+  }
+  function applyGeomOverlayAll() {
+    document.querySelectorAll('.mapwrap').forEach(applyGeomOverlay);
   }
 
   // ---- structure display toggles + map overlays ---------------------------
