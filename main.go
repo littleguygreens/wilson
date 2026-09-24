@@ -299,7 +299,13 @@ func main() {
 	oceanExc := flag.String("oceanExc", "", "comma-separated excluded ocean types for -check")
 	noRiver := flag.Bool("noRiver", false, "reject islands split sea-to-sea by a river, for -check")
 	riverPct := flag.Int("riverPct", 10, "min percent of island a river must strand to reject, for -check")
+	showVersion := flag.Bool("version", false, "print the build's commit and exit")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Println(version())
+		return
+	}
 
 	if *check != "" {
 		runCheck(*check, *size, *moat, *oceanReq, *oceanInc, *oceanExc, *noRiver, *riverPct)

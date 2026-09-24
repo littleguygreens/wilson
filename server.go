@@ -120,7 +120,7 @@ func runServer(addr string) error {
 	mux.HandleFunc("/api/biome", biomeHandler)
 	mux.HandleFunc("/api/structures", structuresHandler)
 
-	log.Printf("wilson web UI on http://localhost%s  (open it from your phone using this machine's LAN IP)", addr)
+	log.Printf("wilson web UI [%s] on http://localhost%s  (open it from your phone using this machine's LAN IP)", version(), addr)
 	return http.ListenAndServe(addr, mux)
 }
 
