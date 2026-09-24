@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"net"
 	"net/http"
 	"runtime"
 	"strconv"
@@ -107,7 +108,7 @@ func geometryForSize(key string) Config {
 	}
 }
 
-func runServer(addr string) error {
+func runServer(addr string, openInBrowser bool) error {
 	palette() // warm the biome colours once
 
 	mux := http.NewServeMux()
@@ -120,8 +121,28 @@ func runServer(addr string) error {
 	mux.HandleFunc("/api/biome", biomeHandler)
 	mux.HandleFunc("/api/structures", structuresHandler)
 
-	log.Printf("wilson web UI [%s] on http://localhost%s  (open it from your phone using this machine's LAN IP)", version(), addr)
-	return http.ListenAndServe(addr, mux)
+	// Bind before opening the browser, so the app window isn't racing the
+	// server for who's ready first.
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return err
+	}
+
+	// localhost, not whatever host addr bound to (e.g. "" or "0.0.0.0" for
+	// the default ":8080", which don't resolve as a URL) -- this machine is
+	// also where the app window opens.
+	host, port, splitErr := net.SplitHostPort(addr)
+	if splitErr != nil || host == "" || host == "0.0.0.0" || host == "::" {
+		host = "localhost"
+	}
+	url := fmt.Sprintf("http://%s:%s", host, port)
+
+	log.Printf("wilson web UI [%s] on %s", version(), url)
+	if openInBrowser {
+		go openBrowser(url)
+	}
+
+	return http.Serve(ln, mux)
 }
 
 func indexHandler(w http.ResponseWriter, r *http.Request) {

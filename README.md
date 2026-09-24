@@ -16,15 +16,18 @@ Requires gcc and Go. Network access needed for the clone.
     make -C cubiomes libcubiomes
     go build
 
-## Web UI (control it from your phone)
-
-Run the scanner as a small web server on any machine with the build
-toolchain, then drive it from your phone's browser:
+## Web UI
 
     ./wilson -serve
 
-Open `http://<that-machine's-LAN-IP>:8080` on your phone and pick your
-parameters:
+Opens straight into a clean app-mode window (Chromium/Chrome's `--app`
+flag under a dedicated profile, so it looks like a desktop app rather than a
+browser tab -- no address bar, no tabs; falls back to your default browser
+if no Chromium-family browser is installed). Pass `-open=false` to skip the
+auto-open and just print the URL, e.g. to drive it from another device on
+the LAN instead: open `http://<this machine's LAN IP>:8080` there.
+
+Pick your parameters:
 
 - **Island size** S → XXL. Bigger sizes push the surrounding ocean farther
   out and zoom the map so the whole landmass fits. **XXL ("continent")** is a

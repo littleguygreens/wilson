@@ -289,8 +289,9 @@ func main() {
 	wanted := flag.Int("n", 5, "stop after this many matching seeds")
 	outDir := flag.String("out", "matches", "directory for PNG maps")
 	workers := flag.Int("workers", runtime.NumCPU(), "concurrent workers")
-	serve := flag.Bool("serve", false, "run the mobile web UI instead of a one-off CLI scan")
+	serve := flag.Bool("serve", false, "run the web UI instead of a one-off CLI scan")
 	addr := flag.String("addr", ":8080", "address for the web UI (used with -serve)")
+	openInBrowser := flag.Bool("open", true, "auto-open the web UI in a clean app-mode browser window (used with -serve)")
 	check := flag.String("check", "", "diagnose a single seed against -size, then exit")
 	size := flag.String("size", "L", "size preset for -check (S/M/L/XL/XXL)")
 	moat := flag.Int("moat", 0, "min mainland moat (blocks) for -check")
@@ -313,7 +314,7 @@ func main() {
 	}
 
 	if *serve {
-		log.Fatal(runServer(*addr))
+		log.Fatal(runServer(*addr, *openInBrowser))
 	}
 
 	if err := os.MkdirAll(*outDir, 0o755); err != nil {
