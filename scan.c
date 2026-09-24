@@ -125,6 +125,15 @@ static int is_river(int id)
     return id == river || id == frozen_river;
 }
 
+/* Sample spacing for river_divides. Biomes are constant over 4x4 blocks
+ * (getBiomeAt's scale-4 cells, see biome_at_block), so this is the *exact*
+ * resolution of the biome field -- not a subsample. A river can be a single
+ * cell wide at points along its course; sampling any coarser (e.g. reusing
+ * islandStep, which is tuned for speed on the much wider oceans island_metrics
+ * looks for) lets the 8-connected flood fill below hop diagonally across a
+ * one-cell-wide crossing and miss a real divide. */
+#define RIVER_STEP 4
+
 /* Applies the ocean-type tri-state over the whole surrounding sea. Oceans use a
  * whitelist rule, not the "at least one" rule the land biomes use: the sea is
  * entirely ocean, so the point is to constrain *which* ocean types may make it
@@ -327,11 +336,13 @@ static void island_metrics(Generator *g, int window, int step,
  * leaves the land joined around its tip. We flag the seed only when the stranded
  * side is at least slicePct of the island, so a channel shaving a small nub off
  * the coast doesn't reject an otherwise good island. Centred on (0,0), which an
- * earlier check has already confirmed is land. Returns 1 to reject. */
-static int river_divides(Generator *g, int window, int step, int slicePct)
+ * earlier check has already confirmed is land. Sampled at RIVER_STEP, not the
+ * caller's geometry step -- see its comment. Returns 1 to reject. */
+static int river_divides(Generator *g, int window, int slicePct)
 {
-    if (window <= 0 || step <= 0 || slicePct <= 0)
+    if (window <= 0 || slicePct <= 0)
         return 0;
+    const int step = RIVER_STEP;
     int n = 2 * (window / step) + 1;
     int c = n / 2;
 
@@ -608,9 +619,10 @@ ScanResult scanner_check(void *s, uint64_t seed, const ScanConfig *cfg)
     }
 
     /* 5b-2. Reject islands a river cuts sea-to-sea (they look like two islands).
-     *       Uses the enclosure window/step, so it needs those set. */
-    if (cfg->rejectDividingRiver && cfg->islandWindow > 0 && cfg->islandStep > 0 &&
-        river_divides(g, cfg->islandWindow, cfg->islandStep, cfg->riverSlicePct))
+     *       Uses the enclosure window, but its own (finer) sample step -- see
+     *       RIVER_STEP. */
+    if (cfg->rejectDividingRiver && cfg->islandWindow > 0 &&
+        river_divides(g, cfg->islandWindow, cfg->riverSlicePct))
         return r;
 
     /* 5c. Structure requirements: required present, excluded absent, and at
