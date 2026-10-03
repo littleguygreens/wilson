@@ -54,7 +54,11 @@ Pick your parameters:
   in view (handy when you haven't listed anything to include). Isolation itself is
   separate — any ocean counts as the water that isolates the island.
 - **Cave biomes** — same include / require / exclude tri-state as surface
-  biomes; a cave counts as present at the minimum-sample threshold.
+  biomes; a cave counts as present at the minimum-sample threshold. The island
+  biome list also offers **Lush / Dripstone / Deep Dark Caves (surface)** —
+  the same cave biomes but matched at the surface sample height, for the rare
+  islands where a cave biome is exposed on top rather than underground. (Sulfur
+  isn't offered there: it only exists at the depth-gated cave relabel.)
 - **Structures on island** — include / require / exclude for each structure
   (village, pillager outpost, woodland mansion, ocean monument, ruined portal,
   ancient city, trial chamber, coastal shipwreck), checked within the island.

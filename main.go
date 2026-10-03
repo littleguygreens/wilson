@@ -143,6 +143,13 @@ var catalog = []biomeEntry{
 	{"surface", "frozen_peaks", "Frozen Peaks", int32(C.frozen_peaks)},
 	{"surface", "stony_peaks", "Stony Peaks", int32(C.stony_peaks)},
 	{"surface", "stony_shore", "Stony Shore", int32(C.stony_shore)},
+	// Cave biomes that occasionally reach the surface (sampled at y=60). Distinct
+	// keys from the underground entries below (same ids); handy for the rare
+	// islands where a lush/dripstone cave is exposed on top. Sulfur isn't here:
+	// it only exists at the depth-gated cave relabel, never at the surface height.
+	{"surface", "lush_caves_surface", "Lush Caves (surface)", int32(C.lush_caves)},
+	{"surface", "dripstone_caves_surface", "Dripstone Caves (surface)", int32(C.dripstone_caves)},
+	{"surface", "deep_dark_surface", "Deep Dark (surface)", int32(C.deep_dark)},
 
 	// Allowed ocean types for the isolation rings.
 	{"ocean", "ocean", "Ocean", int32(C.ocean)},
